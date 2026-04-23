@@ -24,6 +24,34 @@ profile.cov
 go.work
 go.work.sum
 
+# --- IDE / System ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# --- Frontend (React/Vite) ---
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+frontend/.env
+frontend/.env.*
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# --- Backend (Golang) ---
+backend/bin/
+backend/*.exe
+backend/*.test
+backend/.env
+backend/vendor/
+
+# --- Database / Docker ---
+postgres_data/
+
 # env file
 .env
 
