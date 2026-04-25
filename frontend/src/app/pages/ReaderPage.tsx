@@ -27,7 +27,7 @@ export function ReaderPage() {
   const [editingComment, setEditingComment] = useState<string | null>(null);
   const [editContent, setEditContent] = useState<string>('');
   const [sortingMode, setSortingMode] = useState<'Newest' | 'Oldest'>('Newest');
-  
+
   // Current logged-in user
   const currentUser = 'ihnore_ihor';
 
@@ -37,7 +37,7 @@ export function ReaderPage() {
   useEffect(() => {
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
-      
+
       if (currentScrollY > lastScrollY && currentScrollY > 100) {
         setScrollDirection('down');
         setControlsVisible(false);
@@ -45,7 +45,7 @@ export function ReaderPage() {
         setScrollDirection('up');
         setControlsVisible(true);
       }
-      
+
       setLastScrollY(currentScrollY);
     };
 
@@ -76,12 +76,12 @@ export function ReaderPage() {
     const isOwnComment = comment.author === currentUser;
     const isDeleted = comment.deleted;
     const isEditing = editingComment === comment.id;
-    
+
     return (
       <div key={comment.id} className="relative">
         {/* L-shaped connector line to parent's avatar */}
         {depth > 0 && (
-          <div 
+          <div
             className="absolute pointer-events-none z-0"
             style={{
               left: `${parentAvatarOffset + 20}px`, // Center of parent avatar (20px = half of 40px avatar)
@@ -100,8 +100,8 @@ export function ReaderPage() {
             </svg>
           </div>
         )}
-        
-        <div 
+
+        <div
           className="flex gap-3 mb-4 relative z-10"
           style={{ marginLeft: `${marginLeft}px` }}
         >
@@ -110,7 +110,7 @@ export function ReaderPage() {
             alt={comment.author}
             className={`w-10 h-10 rounded-full flex-shrink-0 border-2 border-border ${isDeleted ? 'opacity-40' : ''}`}
           />
-          
+
           <div className="flex-1 min-w-0">
             <div className="bg-card border border-border rounded-lg p-3">
               <div className="flex items-center justify-between mb-2">
@@ -119,11 +119,11 @@ export function ReaderPage() {
                 </span>
                 <span className="text-xs text-muted-foreground">{comment.timestamp}</span>
               </div>
-              
+
               {/* Editing State */}
               {isEditing ? (
                 <div className="space-y-2">
-                  <Textarea 
+                  <Textarea
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
                     className="bg-secondary border-border focus:border-primary focus:ring-primary"
@@ -131,7 +131,7 @@ export function ReaderPage() {
                     autoFocus
                   />
                   <div className="flex gap-2">
-                    <Button 
+                    <Button
                       size="sm"
                       className="bg-[#59631f] hover:bg-[#59631f]/90"
                       onClick={() => {
@@ -142,9 +142,9 @@ export function ReaderPage() {
                     >
                       Зберегти
                     </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => {
                         setEditingComment(null);
                         setEditContent('');
@@ -164,21 +164,21 @@ export function ReaderPage() {
                   ) : (
                     <p className="text-sm leading-relaxed mb-2">{comment.content}</p>
                   )}
-                  
+
                   {/* Action Buttons */}
                   {!isDeleted && (
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <button 
+                      <button
                         className="flex items-center gap-1 hover:text-primary transition-colors"
                         onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
                       >
                         <Reply className="h-3 w-3" />
                         <span>Відповісти</span>
                       </button>
-                      
+
                       {isOwnComment && (
                         <>
-                          <button 
+                          <button
                             className="flex items-center gap-1 hover:text-primary transition-colors"
                             onClick={() => {
                               setEditingComment(comment.id);
@@ -188,7 +188,7 @@ export function ReaderPage() {
                             <Pencil className="h-3 w-3" />
                             <span>Редагувати</span>
                           </button>
-                          <button 
+                          <button
                             className="flex items-center gap-1 hover:text-destructive transition-colors"
                             onClick={() => {
                               // In a real app, this would soft-delete in the backend
@@ -209,7 +209,7 @@ export function ReaderPage() {
             {/* Reply Form */}
             {replyingTo === comment.id && !isEditing && (
               <div className="mt-2 ml-4">
-                <Textarea 
+                <Textarea
                   placeholder="Напишіть відповідь..."
                   className="mb-2 bg-secondary border-border"
                   rows={3}
@@ -240,10 +240,9 @@ export function ReaderPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       {/* Top Controls */}
-      <div 
-        className={`fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-border/40 transition-transform duration-300 ${
-          controlsVisible ? 'translate-y-0' : '-translate-y-full'
-        }`}
+      <div
+        className={`fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-border/40 transition-transform duration-300 ${controlsVisible ? 'translate-y-0' : '-translate-y-full'
+          }`}
       >
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <Button
@@ -263,10 +262,10 @@ export function ReaderPage() {
           </div>
 
           <div className="flex gap-2">
-            <Button variant="ghost" size="icon-sm">
+            <Button variant="ghost" size="sm">
               <Settings className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon-sm" onClick={() => navigate('/')}>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
               <Home className="h-4 w-4" />
             </Button>
           </div>
@@ -274,7 +273,7 @@ export function ReaderPage() {
       </div>
 
       {/* Reader Area */}
-      <div 
+      <div
         className="max-w-4xl mx-auto pt-16 pb-8"
         onClick={toggleControls}
       >
@@ -290,10 +289,9 @@ export function ReaderPage() {
       </div>
 
       {/* Bottom Controls */}
-      <div 
-        className={`fixed bottom-0 left-0 right-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-t border-border/40 transition-transform duration-300 ${
-          controlsVisible ? 'translate-y-0' : 'translate-y-full'
-        }`}
+      <div
+        className={`fixed bottom-0 left-0 right-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-t border-border/40 transition-transform duration-300 ${controlsVisible ? 'translate-y-0' : 'translate-y-full'
+          }`}
       >
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <Button
@@ -339,37 +337,35 @@ export function ReaderPage() {
             <span className="text-sm text-muted-foreground">
               ({mockComments.length + mockComments.reduce((acc, c) => acc + c.replies.length + c.replies.reduce((a, r) => a + r.replies.length, 0), 0)})
             </span>
-            
+
             {/* Right: Newest/Oldest Toggle*/}
             <div className="flex w-full justify-end">
-  <div className="inline-flex items-center gap-6"> {/* Використовуємо gap замість border */}
-    <button
-      onClick={() => setSortingMode('Newest')}
-      className={`py-2 text-sm font-medium transition-colors ${
-        sortingMode === 'Newest'
-          ? 'text-[#aeba68] underline decoration-[#aeba68] underline-offset-4 decoration-2'
-          : 'text-muted-foreground hover:text-foreground'
-      }`}
-    >
-      Новіші
-    </button>
-    <button
-      onClick={() => setSortingMode('Oldest')}
-      className={`py-2 text-sm font-medium transition-colors ${
-        sortingMode === 'Oldest'
-          ? 'text-[#aeba68] underline decoration-[#aeba68] underline-offset-4 decoration-2'
-          : 'text-muted-foreground hover:text-foreground'
-      }`}
-    >
-      Старіші
-    </button>
-  </div>
-</div>
+              <div className="inline-flex items-center gap-6"> {/* Використовуємо gap замість border */}
+                <button
+                  onClick={() => setSortingMode('Newest')}
+                  className={`py-2 text-sm font-medium transition-colors ${sortingMode === 'Newest'
+                      ? 'text-[#aeba68] underline decoration-[#aeba68] underline-offset-4 decoration-2'
+                      : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                >
+                  Новіші
+                </button>
+                <button
+                  onClick={() => setSortingMode('Oldest')}
+                  className={`py-2 text-sm font-medium transition-colors ${sortingMode === 'Oldest'
+                      ? 'text-[#aeba68] underline decoration-[#aeba68] underline-offset-4 decoration-2'
+                      : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                >
+                  Старіші
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* New Comment */}
           <div className="mb-8 bg-card border border-border rounded-lg p-4">
-            <Textarea 
+            <Textarea
               placeholder="Напишіть коментар..."
               className="mb-3 bg-secondary border-border"
               rows={4}

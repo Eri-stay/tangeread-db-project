@@ -356,23 +356,6 @@ export function AdminDashboardPage() {
                 Переглянути заявки
               </Button>
             </div>
-
-            {/* Pending Reports 
-            <div className="p-4 bg-secondary/30 rounded-lg border border-border">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <FileWarning className="h-5 w-5 text-destructive" />
-                  <span className="font-medium">Скарги на контент</span>
-                </div>
-                <span className="text-2xl font-bold text-destructive">12</span>
-              </div>
-              <Link to="/admin/content">
-                <Button variant="outline" size="sm" className="w-full gap-2">
-                  <LinkIcon className="h-4 w-4" />
-                  Перейти до модерації
-                </Button>
-              </Link>
-            </div>*/}
           </div>
         </div>
 

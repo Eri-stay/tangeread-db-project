@@ -55,6 +55,11 @@ postgres_data/
 # env file
 .env
 
+# script files for context preparation
+frontend.txt
+backend.txt
+prepare_context.py
+
 # Editor/IDE
 # .idea/
 # .vscode/

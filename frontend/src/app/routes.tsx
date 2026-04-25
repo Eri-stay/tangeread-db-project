@@ -17,16 +17,11 @@ import { TagManagementPage } from './pages/TagManagementPage';
 import { TeamApplicationsPage } from './pages/TeamApplicationsPage';
 import { Layout } from './components/Layout';
 
-interface RouterProps {
-  userRole: 'guest' | 'reader' | 'author' | 'moderator' | 'admin';
-  onRoleChange: (role: 'guest' | 'reader' | 'author' | 'moderator' | 'admin') => void;
-}
-
-export const createAppRouter = ({ userRole, onRoleChange }: RouterProps) => {
+export const createAppRouter = () => {
   return createBrowserRouter([
     {
       path: '/',
-      element: <Layout userRole={userRole} onRoleChange={onRoleChange} />,
+      element: <Layout />,
       children: [
         {
           index: true,
@@ -38,11 +33,65 @@ export const createAppRouter = ({ userRole, onRoleChange }: RouterProps) => {
         },
         {
           path: 'manga/:id',
-          element: <MangaDetailPage userRole={userRole} />,
+          element: <MangaDetailPage />,
         },
         {
           path: 'profile',
           element: <ProfilePage />,
+        },
+        // Author workspace routes
+        {
+          path: '/author/teams',
+          element: <TeamDashboardPage />,
+        },
+        {
+          path: '/author/projects',
+          element: <AuthorProjectsPage />,
+        },
+        {
+          path: '/author/manga/new',
+          element: <MangaEditorPage />,
+        },
+        {
+          path: '/author/manga/:id/edit',
+          element: <MangaEditorPage />,
+        },
+        {
+          path: '/author/manga/:id/chapter/new',
+          element: <ChapterUploadPage />,
+        },
+        {
+          path: '/author/analytics',
+          element: <AuthorAnalyticsPage />,
+        },
+        {
+          path: '/author/settings',
+          element: <div className="p-8">Settings Page - Coming Soon</div>,
+        },
+        // Admin workspace routes
+        {
+          path: '/admin/dashboard',
+          element: <AdminDashboardPage />,
+        },
+        {
+          path: '/admin/users',
+          element: <UserManagementPage />,
+        },
+        {
+          path: '/admin/content',
+          element: <ContentModerationPage />,
+        },
+        {
+          path: '/admin/logs',
+          element: <ModerationLogsPage />,
+        },
+        {
+          path: '/admin/tags',
+          element: <TagManagementPage />,
+        },
+        {
+          path: '/admin/team-applications',
+          element: <TeamApplicationsPage />,
         },
       ],
     },
@@ -50,60 +99,6 @@ export const createAppRouter = ({ userRole, onRoleChange }: RouterProps) => {
       // Reader page without main header/layout
       path: '/read/:id/:chapter',
       element: <ReaderPage />,
-    },
-    {
-      // Author workspace routes
-      path: '/author/teams',
-      element: <TeamDashboardPage />,
-    },
-    {
-      path: '/author/projects',
-      element: <AuthorProjectsPage />,
-    },
-    {
-      path: '/author/manga/new',
-      element: <MangaEditorPage />,
-    },
-    {
-      path: '/author/manga/:id/edit',
-      element: <MangaEditorPage />,
-    },
-    {
-      path: '/author/manga/:id/chapter/new',
-      element: <ChapterUploadPage />,
-    },
-    {
-      path: '/author/analytics',
-      element: <AuthorAnalyticsPage />,
-    },
-    {
-      path: '/author/settings',
-      element: <div className="p-8">Settings Page - Coming Soon</div>,
-    },
-    {
-      // Admin workspace routes
-      path: '/admin/dashboard',
-      element: <AdminDashboardPage />,
-    },
-    {
-      path: '/admin/users',
-      element: <UserManagementPage />,
-    },
-    {
-      path: '/admin/content',
-      element: <ContentModerationPage />,
-    },
-    {
-      path: '/admin/logs',
-      element: <ModerationLogsPage />,
-    },
-    {
-      path: '/admin/tags',
-      element: <TagManagementPage />,
-    },
-    {
-      path: '/admin/team-applications',
-      element: <TeamApplicationsPage />,
     },
   ]);
 };

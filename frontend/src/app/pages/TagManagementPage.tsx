@@ -12,25 +12,24 @@ interface Tag {
   name: string;
   category: 'Genre' | 'Theme' | 'Format';
   mangaCount: number;
-  isVisible: boolean;
 }
 
 const mockTags: Tag[] = [
-  { id: '1', name: 'Фентезі', category: 'Genre', mangaCount: 342, isVisible: true },
-  { id: '2', name: 'Бойовик', category: 'Genre', mangaCount: 289, isVisible: true },
-  { id: '3', name: 'Романтика', category: 'Genre', mangaCount: 256, isVisible: true },
-  { id: '4', name: 'Драма', category: 'Genre', mangaCount: 198, isVisible: true },
-  { id: '5', name: 'Комедія', category: 'Genre', mangaCount: 167, isVisible: true },
-  { id: '6', name: 'Школа', category: 'Theme', mangaCount: 145, isVisible: true },
-  { id: '7', name: 'Магія', category: 'Theme', mangaCount: 234, isVisible: true },
-  { id: '8', name: 'Дракони', category: 'Theme', mangaCount: 87, isVisible: true },
-  { id: '9', name: 'Помста', category: 'Theme', mangaCount: 93, isVisible: true },
-  { id: '10', name: 'Подорож у часі', category: 'Theme', mangaCount: 56, isVisible: true },
-  { id: '11', name: 'Манхва', category: 'Format', mangaCount: 523, isVisible: true },
-  { id: '12', name: 'Манга', category: 'Format', mangaCount: 412, isVisible: true },
-  { id: '13', name: 'Веб-комікс', category: 'Format', mangaCount: 178, isVisible: true },
-  { id: '14', name: 'Маньхуа', category: 'Format', mangaCount: 89, isVisible: true },
-  { id: '15', name: 'Надприродне', category: 'Theme', mangaCount: 67, isVisible: false },
+  { id: '1', name: 'Фентезі', category: 'Genre', mangaCount: 342 },
+  { id: '2', name: 'Бойовик', category: 'Genre', mangaCount: 289 },
+  { id: '3', name: 'Романтика', category: 'Genre', mangaCount: 256 },
+  { id: '4', name: 'Драма', category: 'Genre', mangaCount: 198 },
+  { id: '5', name: 'Комедія', category: 'Genre', mangaCount: 167 },
+  { id: '6', name: 'Школа', category: 'Theme', mangaCount: 145 },
+  { id: '7', name: 'Магія', category: 'Theme', mangaCount: 234 },
+  { id: '8', name: 'Дракони', category: 'Theme', mangaCount: 87 },
+  { id: '9', name: 'Помста', category: 'Theme', mangaCount: 93 },
+  { id: '10', name: 'Подорож у часі', category: 'Theme', mangaCount: 56 },
+  { id: '11', name: 'Манхва', category: 'Format', mangaCount: 523 },
+  { id: '12', name: 'Манга', category: 'Format', mangaCount: 412 },
+  { id: '13', name: 'Веб-комікс', category: 'Format', mangaCount: 178 },
+  { id: '14', name: 'Маньхуа', category: 'Format', mangaCount: 89 },
+  { id: '15', name: 'Надприродне', category: 'Theme', mangaCount: 67 },
 ];
 
 const categoryColors = {
@@ -43,29 +42,21 @@ export function TagManagementPage() {
   const [tags, setTags] = useState<Tag[]>(mockTags);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [tagToDelete, setTagToDelete] = useState<string | null>(null);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const [newTagName, setNewTagName] = useState('');
   const [newTagCategory, setNewTagCategory] = useState<'Genre' | 'Theme' | 'Format'>('Genre');
 
-  const handleToggleVisibility = (tagId: string) => {
-    setTags(prev =>
-      prev.map(tag =>
-        tag.id === tagId ? { ...tag, isVisible: !tag.isVisible } : tag
-      )
-    );
-  };
-
   const handleAddTag = () => {
     if (!newTagName.trim()) return;
-    
+
     const newTag: Tag = {
       id: (tags.length + 1).toString(),
       name: newTagName,
       category: newTagCategory,
       mangaCount: 0,
-      isVisible: true,
     };
-    
+
     setTags(prev => [...prev, newTag]);
     setNewTagName('');
     setNewTagCategory('Genre');
@@ -74,7 +65,7 @@ export function TagManagementPage() {
 
   const handleEditTag = () => {
     if (!editingTag || !newTagName.trim()) return;
-    
+
     setTags(prev =>
       prev.map(tag =>
         tag.id === editingTag.id
@@ -82,16 +73,17 @@ export function TagManagementPage() {
           : tag
       )
     );
-    
+
     setEditingTag(null);
     setNewTagName('');
     setNewTagCategory('Genre');
     setIsEditModalOpen(false);
   };
 
-  const handleDeleteTag = (tagId: string) => {
-    if (confirm('Ви впевнені, що хочете видалити цей тег?')) {
-      setTags(prev => prev.filter(tag => tag.id !== tagId));
+  const handleDeleteTag = () => {
+    if (tagToDelete) {
+      setTags(prev => prev.filter(tag => tag.id !== tagToDelete));
+      setTagToDelete(null);
     }
   };
 
@@ -145,9 +137,6 @@ export function TagManagementPage() {
                   <th className="text-center px-6 py-4 text-sm font-semibold text-muted-foreground">
                     Кількість манг
                   </th>
-                  <th className="text-center px-6 py-4 text-sm font-semibold text-muted-foreground">
-                    Статус
-                  </th>
                   <th className="text-center px-6 py-4 text-sm font-semibold text-muted-foreground w-32">
                     Дії
                   </th>
@@ -167,28 +156,11 @@ export function TagManagementPage() {
                     <td className="px-6 py-4 text-center">
                       <span className="text-muted-foreground">{tag.mangaCount}</span>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => handleToggleVisibility(tag.id)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          tag.isVisible ? 'bg-[#59631f]' : 'bg-secondary'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            tag.isVisible ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                        <span className="sr-only">
-                          {tag.isVisible ? 'Видимий' : 'Прихований'}
-                        </span>
-                      </button>
-                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-2">
                         <Button
                           variant="ghost"
-                          size="icon-sm"
+                          size="sm"
                           onClick={() => openEditModal(tag)}
                           className="text-primary hover:text-primary hover:bg-primary/10"
                         >
@@ -197,8 +169,8 @@ export function TagManagementPage() {
                         </Button>
                         <Button
                           variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleDeleteTag(tag.id)}
+                          size="sm"
+                          onClick={() => setTagToDelete(tag.id)}
                           className="text-destructive hover:text-destructive hover:bg-destructive/10"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -323,6 +295,40 @@ export function TagManagementPage() {
               className="bg-[#59631f] hover:bg-[#59631f]/90"
             >
               Зберегти зміни
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Tag Confirmation Modal */}
+      <Dialog open={!!tagToDelete} onOpenChange={(open) => !open && setTagToDelete(null)}>
+        <DialogContent className="sm:max-w-[400px] bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Видалити тег
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              Ви впевнені, що хочете видалити цей тег? Цю дію неможливо скасувати.
+            </p>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="ghost"
+              onClick={() => setTagToDelete(null)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              Скасувати
+            </Button>
+            <Button
+              onClick={handleDeleteTag}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              Видалити
             </Button>
           </DialogFooter>
         </DialogContent>

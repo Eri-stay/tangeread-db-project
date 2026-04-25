@@ -18,26 +18,79 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
   const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
   const [nicknameError, setNicknameError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [generalError, setGeneralError] = useState('');
 
-  const handleRegister = (e: React.FormEvent) => {
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Demo validation error
-    if (nickname.toLowerCase() === 'admin' || nickname.toLowerCase() === 'user') {
-      setNicknameError('Цей нікнейм вже використовується');
-      return;
-    }
-    
     setNicknameError('');
-    // Success logic here
-    onSuccess?.();
-    onClose();
+    setGeneralError('');
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`${apiUrl}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, username: nickname, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data.error && data.error.includes('username')) {
+          setNicknameError('Цей нікнейм вже використовується');
+        } else {
+          setGeneralError(data.error || 'Помилка реєстрації');
+        }
+        return;
+      }
+
+      // Switch to login tab on success
+      setActiveTab('login');
+      setGeneralError('Реєстрація успішна! Тепер увійдіть.');
+    } catch (err) {
+      setGeneralError('Помилка з\'єднання з сервером');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSuccess?.();
-    onClose();
+    setGeneralError('');
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(`${apiUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setGeneralError(data.error || 'Невірний email або пароль');
+        return;
+      }
+
+      // Save token and user info
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      }
+      if (data.user) {
+        localStorage.setItem('user', JSON.stringify(data.user));
+      }
+
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      setGeneralError('Помилка з\'єднання з сервером');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -57,19 +110,28 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="w-full grid grid-cols-2 bg-secondary/50 rounded-none border-b border-border h-12">
-            <TabsTrigger 
-              value="login" 
+            <TabsTrigger
+              value="login"
               className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none"
             >
               Вхід
             </TabsTrigger>
-            <TabsTrigger 
+            <TabsTrigger
               value="register"
               className="data-[state=active]:bg-transparent data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none"
             >
               Реєстрація
             </TabsTrigger>
           </TabsList>
+
+          {generalError && (
+            <div className={`mx-6 mt-4 p-3 border text-sm rounded-md text-center ${generalError.includes('успішна')
+              ? 'bg-primary/10 border-primary/30 text-primary'
+              : 'bg-destructive/10 border-destructive/30 text-destructive'
+              }`}>
+              {generalError}
+            </div>
+          )}
 
           {/* Login Tab */}
           <TabsContent value="login" className="p-6 mt-0">
@@ -111,11 +173,12 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
                 Забули пароль?
               </button>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-11 text-base"
+                disabled={isLoading}
               >
-                Увійти
+                {isLoading ? 'Зачекайте...' : 'Увійти'}
               </Button>
 
               <div className="text-center text-sm text-muted-foreground">
@@ -168,8 +231,8 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
                 {nicknameError && (
                   <p className="text-xs text-destructive mt-1 flex items-center gap-1">
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-                      <circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" strokeWidth="1"/>
-                      <path d="M6 3v3M6 8v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      <circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" strokeWidth="1" />
+                      <path d="M6 3v3M6 8v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                     {nicknameError}
                   </p>
@@ -195,11 +258,12 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
                 </p>
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-11 text-base"
+                disabled={isLoading}
               >
-                Зареєструватися
+                {isLoading ? 'Зачекайте...' : 'Зареєструватися'}
               </Button>
             </form>
           </TabsContent>

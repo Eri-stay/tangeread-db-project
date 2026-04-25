@@ -4,15 +4,11 @@ import { Star, Bookmark, ArrowUpDown, ChevronLeft, ChevronRight, Eye, Upload, Bo
 import { mockMangaList, generateMockChapters } from '../data/mockData';
 import { Button } from '../components/ui/button';
 import { MangaCard } from '../components/MangaCard';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
+import { AuthModal } from '../components/AuthModal';
 
-interface MangaDetailPageProps {
-  userRole: 'guest' | 'reader' | 'author' | 'moderator' | 'admin';
-}
-
-export function MangaDetailPage({ userRole }: MangaDetailPageProps) {
+export function MangaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(0);
@@ -20,16 +16,27 @@ export function MangaDetailPage({ userRole }: MangaDetailPageProps) {
   const [userRating, setUserRating] = useState(0);
   const [hoveredStar, setHoveredStar] = useState(0);
   const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [user, setUser] = useState<{username: string, role: string} | null>(null);
   const similarRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        setUser(JSON.parse(userStr));
+      } catch (e) {}
+    }
+  }, []);
+
+  // Values must match DB list_status enum exactly
   const bookmarkOptions = [
     { value: 'reading', label: 'Читаю', icon: BookOpen },
     { value: 'completed', label: 'Прочитано', icon: Check },
     { value: 'planned', label: 'Заплановано', icon: Flag },
     { value: 'rereading', label: 'Перечитую', icon: RefreshCw },
-    { value: 'on-hold', label: 'Відкладено', icon: Pause },
+    { value: 'on_hold', label: 'Відкладено', icon: Pause },
     { value: 'dropped', label: 'Покинуто', icon: X },
-    { value: 'favorite', label: 'Улюблене', icon: Heart },
   ];
 
   const manga = mockMangaList.find(m => m.id === id);
@@ -49,13 +56,21 @@ export function MangaDetailPage({ userRole }: MangaDetailPageProps) {
   );
 
   const handleBookmark = () => {
-    if (userRole === 'guest') {
+    if (!user) {
       setShowLoginModal(true);
     }
   };
 
+  const handleFavorite = () => {
+    if (!user) {
+      setShowLoginModal(true);
+    } else {
+      setIsFavorite(prev => !prev);
+    }
+  };
+
   const handleRating = (rating: number) => {
-    if (userRole === 'guest') {
+    if (!user) {
       setShowLoginModal(true);
     } else {
       setUserRating(rating);
@@ -122,7 +137,7 @@ export function MangaDetailPage({ userRole }: MangaDetailPageProps) {
                   Почати читати
                 </Link>
               </Button>
-              
+
               {/* Bookmark Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -146,8 +161,8 @@ export function MangaDetailPage({ userRole }: MangaDetailPageProps) {
                     )}
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent 
-                  align="start" 
+                <DropdownMenuContent
+                  align="start"
                   className="w-56 bg-popover text-popover-foreground border-border shadow-lg"
                   sideOffset={5}
                 >
@@ -158,7 +173,7 @@ export function MangaDetailPage({ userRole }: MangaDetailPageProps) {
                       <DropdownMenuItem
                         key={option.value}
                         onClick={() => {
-                          if (userRole === 'guest') {
+                          if (!user) {
                             setShowLoginModal(true);
                           } else {
                             setBookmarkStatus(option.value);
@@ -174,10 +189,24 @@ export function MangaDetailPage({ userRole }: MangaDetailPageProps) {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {(userRole === 'author' || userRole === 'moderator' || userRole === 'admin') && (
-                <Button 
+              {/* Favourite toggle — separate from list status (maps to is_favorite in DB) */}
+              <button
+                type="button"
+                onClick={handleFavorite}
+                title={isFavorite ? 'Прибрати з улюбленого' : 'Додати до улюбленого'}
+                className={`inline-flex items-center justify-center h-10 w-10 rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                  isFavorite
+                    ? 'bg-pink-500/10 border-pink-500/50 text-pink-500 hover:bg-pink-500/20'
+                    : 'border-border bg-background hover:bg-accent hover:text-accent-foreground'
+                }`}
+              >
+                <Heart className={`h-5 w-5 transition-all ${isFavorite ? 'fill-pink-500' : ''}`} />
+              </button>
+
+              {user && (user.role === 'author' || user.role === 'moderator' || user.role === 'admin') && (
+                <Button
                   asChild
-                  variant="outline" 
+                  variant="outline"
                   size="lg"
                   className="border-primary/50 text-primary hover:bg-primary/10"
                 >
@@ -327,21 +356,12 @@ export function MangaDetailPage({ userRole }: MangaDetailPageProps) {
         </section>
       </div>
 
-      {/* Login Modal */}
-      <Dialog open={showLoginModal} onOpenChange={setShowLoginModal}>
-        <DialogContent className="bg-card border-border">
-          <DialogHeader>
-            <DialogTitle>Потрібна авторизація</DialogTitle>
-            <DialogDescription>
-              Для використання цієї функції необхідно увійти до системи. 
-              Будь ласка, змініть роль на "Зареєстрований читач" або вище у профілі користувача.
-            </DialogDescription>
-          </DialogHeader>
-          <Button onClick={() => setShowLoginModal(false)} className="mt-4">
-            Зрозуміло
-          </Button>
-        </DialogContent>
-      </Dialog>
+      {/* Auth Modal — shown when guest tries a protected action */}
+      <AuthModal
+        open={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onSuccess={() => setShowLoginModal(false)}
+      />
     </div>
   );
 }

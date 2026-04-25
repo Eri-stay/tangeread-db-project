@@ -1,9 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Camera,
   Star,
   Trash2,
   AlertTriangle,
+  Settings,
+  Clock,
+  BookOpen,
+  Filter,
 } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "../components/ui/button";
@@ -112,7 +116,7 @@ const mockBookmarks: { [key: string]: BookmarkManga[] } = {
       addedDate: "2026-03-15",
     },
   ],
-  onHold: [],
+  on_hold: [],
   dropped: [],
 };
 
@@ -156,25 +160,164 @@ const mockHistory: HistoryEntry[] = [
 ];
 
 export function ProfilePage() {
-  const [nickname, setNickname] = useState(
-    "porang-porang-lino",
-  );
-  const [isEditingNickname, setIsEditingNickname] =
-    useState(false);
+  const [nickname, setNickname] = useState("");
+  const [avatar, setAvatar] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState("");
+  const [isEditingNickname, setIsEditingNickname] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("bookmarks");
-  const [bookmarkCategory, setBookmarkCategory] =
-    useState("reading");
+  const [bookmarkCategory, setBookmarkCategory] = useState("reading");
   const [sortBy, setSortBy] = useState("date-added");
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSaveNickname = () => {
-    setIsEditingNickname(false);
-    // Save logic here
+  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        const response = await fetch(`${apiUrl}/users/profile`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setNickname(data.username || "");
+          setAvatar(data.avatar || "");
+          setEmail(data.email || "");
+          setRole(data.role || "");
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile", err);
+      }
+    };
+
+    fetchProfile();
+  }, [apiUrl]);
+
+  const handleSaveNickname = async () => {
+    setIsSaving(true);
+    setError("");
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${apiUrl}/users/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ username: nickname })
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || "Помилка оновлення профілю");
+        return;
+      }
+      
+      const data = await response.json();
+      setNickname(data.user.username);
+      
+      // Update local storage user info
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        user.username = data.user.username;
+        localStorage.setItem('user', JSON.stringify(user));
+        // Force refresh header (Optional: could also use a Context/Redux)
+        window.dispatchEvent(new Event("storage"));
+      }
+
+      setIsEditingNickname(false);
+    } catch (err) {
+      setError("Помилка з'єднання");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDeleteAccount = () => {
-    setDeleteModalOpen(false);
-    // Delete account logic
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      // 1. Upload to S3
+      const uploadRes = await fetch(`${apiUrl}/users/avatar`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json();
+        throw new Error(errData.error || 'Upload failed');
+      }
+      const uploadData = await uploadRes.json();
+      const newAvatarUrl = uploadData.avatar_url;
+
+      // 2. Update DB
+      const updateRes = await fetch(`${apiUrl}/users/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ username: nickname, avatar_url: newAvatarUrl })
+      });
+
+      if (!updateRes.ok) throw new Error('Update DB failed');
+      
+      setAvatar(newAvatarUrl);
+      
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        user.avatar = newAvatarUrl;
+        localStorage.setItem('user', JSON.stringify(user));
+        window.dispatchEvent(new Event("storage"));
+      }
+
+    } catch (err: any) {
+      console.error(err);
+      setError("Помилка завантаження фото: " + err.message);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/users/account`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        setDeleteModalOpen(false);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.dispatchEvent(new Event("storage"));
+        window.location.href = '/';
+      } else {
+        setError("Помилка видалення акаунту");
+      }
+    } catch(e) {
+        console.error(e);
+        setError("Помилка з'єднання при видаленні");
+    }
   };
 
   const renderStars = (rating: number) => {
@@ -199,7 +342,7 @@ export function ProfilePage() {
     completed: "Прочитано",
     favorite: "Улюблене",
     planned: "Заплановано",
-    onHold: "Відкладено",
+    on_hold: "Відкладено",
     dropped: "Покинуто",
   };
 
@@ -226,16 +369,26 @@ export function ProfilePage() {
             <div className="relative group">
               <div className="w-32 h-32 rounded-full overflow-hidden bg-secondary border-2 border-border">
                 <ImageWithFallback
-                  src="https://i.pinimg.com/736x/1f/05/46/1f05460f32bfad4949ee4f86100dc3d2.jpg"
+                  src={avatar || "https://i.pinimg.com/736x/1f/05/46/1f05460f32bfad4949ee4f86100dc3d2.jpg"}
                   alt="User Avatar"
                   className="w-full h-full object-cover"
                 />
               </div>
-              <button className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <button 
+                className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => fileInputRef.current?.click()}
+              >
                 <Camera className="h-6 w-6 text-white" />
                 <span className="sr-only">Змінити фото</span>
               </button>
-              <p className="text-xs text-muted-foreground text-center mt-2">
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleAvatarUpload} 
+                accept="image/*" 
+                className="hidden" 
+              />
+              <p className="text-xs text-muted-foreground text-center mt-2 cursor-pointer hover:text-primary" onClick={() => fileInputRef.current?.click()}>
                 Змінити фото
               </p>
             </div>
@@ -262,9 +415,10 @@ export function ProfilePage() {
                   {isEditingNickname ? (
                     <Button
                       onClick={handleSaveNickname}
+                      disabled={isSaving}
                       className="bg-[#aeba68] hover:bg-[#aeba68]/90 text-[#0a0a0a]"
                     >
-                      Зберегти
+                      {isSaving ? "Збереження..." : "Зберегти"}
                     </Button>
                   ) : (
                     <Button
@@ -275,6 +429,18 @@ export function ProfilePage() {
                       Редагувати
                     </Button>
                   )}
+                </div>
+                {error && <p className="text-destructive text-sm mt-2">{error}</p>}
+                
+                <div className="mt-4 grid grid-cols-2 gap-4 max-w-md">
+                  <div>
+                    <Label className="text-sm font-medium mb-1 block text-muted-foreground">Email</Label>
+                    <p className="text-sm">{email || "—"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium mb-1 block text-muted-foreground">Роль</Label>
+                    <p className="text-sm capitalize">{role || "reader"}</p>
+                  </div>
                 </div>
               </div>
 
@@ -532,8 +698,8 @@ export function ProfilePage() {
               Скасувати
             </Button>
             <Button
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDeleteAccount}
-              className="flex-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
             >
               Підтвердити видалення
             </Button>

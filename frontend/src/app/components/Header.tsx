@@ -1,24 +1,42 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, User, Filter } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
-import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { AuthModal } from './AuthModal';
 
-type UserRole = 'guest' | 'reader' | 'author' | 'moderator' | 'admin';
-
-interface HeaderProps {
-  userRole: UserRole;
-  onRoleChange: (role: UserRole) => void;
-}
-
-export function Header({ userRole, onRoleChange }: HeaderProps) {
+export function Header() {
   const [searchQuery, setSearchQuery] = useState('');
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [user, setUser] = useState<{username: string, role: string} | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        setUser(JSON.parse(userStr));
+      } catch (e) {}
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    navigate('/');
+  };
+
+  const handleLoginSuccess = () => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        setUser(JSON.parse(userStr));
+      } catch (e) {}
+    }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +46,7 @@ export function Header({ userRole, onRoleChange }: HeaderProps) {
   };
 
   const handleProfileClick = () => {
-    if (userRole === 'guest') {
+    if (!user) {
       setAuthModalOpen(true);
     } else {
       navigate('/profile');
@@ -112,7 +130,7 @@ export function Header({ userRole, onRoleChange }: HeaderProps) {
               <User className="h-5 w-5 text-foreground" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72 bg-card border-border">
-              {userRole !== 'guest' ? (
+              {user ? (
                 <>
                   <DropdownMenuLabel className="text-base">
                     <div className="flex items-center gap-3 py-2">
@@ -120,8 +138,8 @@ export function Header({ userRole, onRoleChange }: HeaderProps) {
                         <User className="h-5 w-5 text-primary" />
                       </div>
                       <div>
-                        <div className="font-semibold">КитайськийДракон</div>
-                        <div className="text-xs text-muted-foreground font-normal capitalize">{userRole}</div>
+                        <div className="font-semibold">{user.username}</div>
+                        <div className="text-xs text-muted-foreground font-normal capitalize">{user.role}</div>
                       </div>
                     </div>
                   </DropdownMenuLabel>
@@ -134,52 +152,15 @@ export function Header({ userRole, onRoleChange }: HeaderProps) {
                 </>
               )}
               
-              <div className="p-4">
-                <Label className="text-sm mb-3 block text-muted-foreground">Демо: Перемикач ролей</Label>
-                <RadioGroup value={userRole} onValueChange={(value) => onRoleChange(value as UserRole)}>
-                  <div className="flex items-center space-x-2 py-2">
-                    <RadioGroupItem value="guest" id="guest" />
-                    <Label htmlFor="guest" className="cursor-pointer text-sm font-normal">
-                      Незареєстрований
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2 py-2">
-                    <RadioGroupItem value="reader" id="reader" />
-                    <Label htmlFor="reader" className="cursor-pointer text-sm font-normal">
-                      Зареєстрований читач
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2 py-2">
-                    <RadioGroupItem value="author" id="author" />
-                    <Label htmlFor="author" className="cursor-pointer text-sm font-normal">
-                      Автор
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2 py-2">
-                    <RadioGroupItem value="moderator" id="moderator" />
-                    <Label htmlFor="moderator" className="cursor-pointer text-sm font-normal">
-                      Модератор
-                    </Label>
-                  </div>
-                  <div className="flex items-center space-x-2 py-2">
-                    <RadioGroupItem value="admin" id="admin" />
-                    <Label htmlFor="admin" className="cursor-pointer text-sm font-normal">
-                      Адміністратор
-                    </Label>
-                  </div>
-                </RadioGroup>
-              </div>
-
-              <DropdownMenuSeparator className="bg-border" />
               <DropdownMenuItem className="cursor-pointer" onClick={handleProfileClick}>
-                {userRole === 'guest' ? 'Увійти / Зареєструватися' : 'Налаштування профілю'}
+                {!user ? 'Увійти / Зареєструватися' : 'Налаштування профілю'}
               </DropdownMenuItem>
-              {(userRole === 'author' || userRole === 'moderator' || userRole === 'admin') && (
+              {user && (user.role === 'author' || user.role === 'moderator' || user.role === 'admin') && (
                 <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/author/projects')}>
                   Робочий простір автора
                 </DropdownMenuItem>
               )}
-              {(userRole === 'moderator' || userRole === 'admin') && (
+              {user && (user.role === 'moderator' || user.role === 'admin') && (
                 <DropdownMenuItem 
                   className="cursor-pointer focus:text-destructive" 
                   onClick={() => navigate('/admin/dashboard')}
@@ -187,12 +168,12 @@ export function Header({ userRole, onRoleChange }: HeaderProps) {
                   Панель адміністрування
                 </DropdownMenuItem>
               )}
-              {userRole !== 'guest' && (
+              {user && (
                 <>
                   <DropdownMenuSeparator className="bg-border" />
                   <DropdownMenuItem 
                     className="cursor-pointer text-destructive focus:text-destructive" 
-                    onClick={() => onRoleChange('guest')}
+                    onClick={handleLogout}
                   >
                     Вийти з акаунту
                   </DropdownMenuItem>
@@ -232,7 +213,7 @@ export function Header({ userRole, onRoleChange }: HeaderProps) {
       <AuthModal 
         open={authModalOpen} 
         onClose={() => setAuthModalOpen(false)}
-        onSuccess={() => onRoleChange('reader')}
+        onSuccess={handleLoginSuccess}
       />
     </>
   );

@@ -72,20 +72,40 @@ const mockUsers: SearchResult[] = [
   },
 ];
 
-const roleOptions = ['Перекладач', 'Клінер', 'Тайпер', 'Редактор'];
+const roleOptions = [
+  { value: 'leader', label: 'Лідер' },
+  { value: 'translator', label: 'Перекладач' },
+  { value: 'cleaner', label: 'Клінер' },
+  { value: 'typer', label: 'Тайпер' },
+  { value: 'editor', label: 'Редактор' },
+];
+
+interface InitialMember extends SearchResult {
+  role: string;
+}
 
 export function TeamDashboardPage() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamMembers);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [searchError, setSearchError] = useState('');
-  const [selectedRole, setSelectedRole] = useState<string>('Перекладач');
+  const [selectedRole, setSelectedRole] = useState<string>('translator');
   const [isSearching, setIsSearching] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showApplicationModal, setShowApplicationModal] = useState(false);
   const [teamName, setTeamName] = useState('');
   const [teamDescription, setTeamDescription] = useState('');
-  const [initialMembers, setInitialMembers] = useState<SearchResult[]>([]);
+  
+  // Current user mock data
+  const currentUser: InitialMember = {
+    id: 'current_user',
+    nickname: 'ihnore_ihor',
+    avatar: 'https://i.pinimg.com/736x/d9/df/b1/d9dfb178d24b4da545af08e8d31bcc34.jpg',
+    email: 'ihor@example.com',
+    role: 'leader',
+  };
+
+  const [initialMembers, setInitialMembers] = useState<InitialMember[]>([]);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const [applicationSubmitted, setApplicationSubmitted] = useState(false);
 
@@ -156,7 +176,12 @@ export function TeamDashboardPage() {
     // Reset form
     setTeamName('');
     setTeamDescription('');
-    setInitialMembers([]);
+    setInitialMembers([currentUser]);
+  };
+
+  const handleOpenApplicationModal = () => {
+    setInitialMembers([currentUser]);
+    setShowApplicationModal(true);
   };
 
   const handleAddInitialMember = () => {
@@ -166,9 +191,17 @@ export function TeamDashboardPage() {
     );
 
     if (found && !initialMembers.some(m => m.id === found.id)) {
-      setInitialMembers(prev => [...prev, found]);
+      setInitialMembers(prev => [...prev, { ...found, role: 'translator' }]);
       setMemberSearchQuery('');
     }
+  };
+
+  const handleInitialMemberRoleChange = (memberId: string, newRole: string) => {
+    setInitialMembers(prev =>
+      prev.map(member =>
+        member.id === memberId ? { ...member, role: newRole } : member
+      )
+    );
   };
 
   return (
@@ -184,7 +217,7 @@ export function TeamDashboardPage() {
               </p>
             </div>
             <Button 
-              onClick={() => setShowApplicationModal(true)}
+              onClick={handleOpenApplicationModal}
               className="bg-[#59631f] hover:bg-[#59631f]/90 gap-2"
             >
               <Plus className="h-4 w-4" />
@@ -276,8 +309,8 @@ export function TeamDashboardPage() {
                         </SelectTrigger>
                         <SelectContent className="bg-card border-border">
                           {roleOptions.map((role) => (
-                            <SelectItem key={role} value={role}>
-                              {role}
+                            <SelectItem key={role.value} value={role.value}>
+                              {role.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -348,8 +381,8 @@ export function TeamDashboardPage() {
                   </SelectTrigger>
                   <SelectContent className="bg-card border-border">
                     {roleOptions.map((role) => (
-                      <SelectItem key={role} value={role}>
-                        {role}
+                      <SelectItem key={role.value} value={role.value}>
+                        {role.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -508,14 +541,34 @@ export function TeamDashboardPage() {
                           <p className="text-xs text-muted-foreground">{member.email}</p>
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setInitialMembers(prev => prev.filter(m => m.id !== member.id))}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <UserMinus className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={member.role}
+                          onValueChange={(value) => handleInitialMemberRoleChange(member.id, value)}
+                          disabled={member.id === currentUser.id}
+                        >
+                          <SelectTrigger className="w-[140px] bg-secondary border-border h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-card border-border">
+                            {roleOptions.map((role) => (
+                              <SelectItem key={role.value} value={role.value} className="text-xs">
+                                {role.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {member.id !== currentUser.id && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setInitialMembers(prev => prev.filter(m => m.id !== member.id))}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                          >
+                            <UserMinus className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
