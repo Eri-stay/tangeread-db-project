@@ -186,12 +186,12 @@ export function MangaDetailPage() {
             <p className="text-muted-foreground mb-4">Автор: {manga.author}</p>
 
             <div className="flex flex-wrap gap-2 mb-4">
-              {manga.genres.map((genre, idx) => (
+              {manga.tags.map((tag, idx) => (
                 <span
                   key={idx}
-                  className="px-3 py-1 rounded-full bg-primary/20 text-primary border border-primary/30 text-sm"
+                  className="px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-medium"
                 >
-                  {genre}
+                  {tag}
                 </span>
               ))}
             </div>

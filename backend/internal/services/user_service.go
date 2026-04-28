@@ -13,8 +13,8 @@ type UserService interface {
 	GetProfile(userID uint) (*models.User, error)
 	UpdateProfile(userID uint, username string, avatarURL *string) (*models.User, error)
 	SoftDeleteAccount(userID uint) error
-	GetBookmarks(userID uint) (map[string][]models.BookmarkDTO, error)
-	GetHistory(userID uint) ([]models.HistoryDTO, error)
+	GetBookmarks(userID uint, limit, offset int) (map[string][]models.BookmarkDTO, map[string]int, error)
+	GetHistory(userID uint, limit, offset int) ([]models.HistoryDTO, error)
 }
 
 type userService struct {
@@ -78,10 +78,15 @@ func (s *userService) SoftDeleteAccount(userID uint) error {
 	return s.userRepo.SoftDelete(userID)
 }
 
-func (s *userService) GetBookmarks(userID uint) (map[string][]models.BookmarkDTO, error) {
-	bookmarksList, err := s.userRepo.GetBookmarks(userID)
+func (s *userService) GetBookmarks(userID uint, limit, offset int) (map[string][]models.BookmarkDTO, map[string]int, error) {
+	bookmarksList, err := s.userRepo.GetBookmarks(userID, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+
+	counts, err := s.userRepo.GetBookmarkCounts(userID)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	result := map[string][]models.BookmarkDTO{
@@ -103,11 +108,11 @@ func (s *userService) GetBookmarks(userID uint) (map[string][]models.BookmarkDTO
 		}
 	}
 
-	return result, nil
+	return result, counts, nil
 }
 
-func (s *userService) GetHistory(userID uint) ([]models.HistoryDTO, error) {
-	historyList, err := s.userRepo.GetHistory(userID)
+func (s *userService) GetHistory(userID uint, limit, offset int) ([]models.HistoryDTO, error) {
+	historyList, err := s.userRepo.GetHistory(userID, limit, offset)
 	if err != nil {
 		return nil, err
 	}

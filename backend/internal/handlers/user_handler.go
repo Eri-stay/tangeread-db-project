@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,11 +39,11 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":       user.ID,
-		"username": user.Username,
-		"email":    user.Email,
-		"avatar":   user.AvatarURL,
-		"role":     user.Role,
+		"id":         user.ID,
+		"username":   user.Username,
+		"email":      user.Email,
+		"avatar_url": user.AvatarURL,
+		"role":       user.Role,
 	})
 }
 
@@ -155,13 +156,19 @@ func (h *UserHandler) GetBookmarks(c *gin.Context) {
 		return
 	}
 
-	bookmarks, err := h.userService.GetBookmarks(userID.(uint))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	bookmarks, counts, err := h.userService.GetBookmarks(userID.(uint), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, bookmarks)
+	c.JSON(http.StatusOK, gin.H{
+		"data":   bookmarks,
+		"counts": counts,
+	})
 }
 
 func (h *UserHandler) GetHistory(c *gin.Context) {
@@ -171,7 +178,10 @@ func (h *UserHandler) GetHistory(c *gin.Context) {
 		return
 	}
 
-	history, err := h.userService.GetHistory(userID.(uint))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	history, err := h.userService.GetHistory(userID.(uint), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

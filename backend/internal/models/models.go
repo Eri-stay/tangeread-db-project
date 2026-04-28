@@ -89,19 +89,19 @@ const (
 // --- Models ---
 
 type User struct {
-	ID           uint   `gorm:"primaryKey"`
-	Email        string `gorm:"uniqueIndex;not null"`
-	Username     string `gorm:"uniqueIndex;not null"`
-	PasswordHash string `gorm:"not null"`
-	AvatarURL    *string
-	Role         UserRole `gorm:"type:varchar(20);not null;default:'reader'"`
-	IsBanned     bool     `gorm:"not null;default:false"`
-	BanReason    *string
-	BanExpiresAt *time.Time
-	BannedByID   *uint
-	BannedBy     *User          `gorm:"foreignKey:BannedByID"`
-	DeletedAt    gorm.DeletedAt `gorm:"index"`
-	CreatedAt    time.Time
+	ID           uint           `gorm:"primaryKey" json:"id"`
+	Email        string         `gorm:"uniqueIndex;not null" json:"email"`
+	Username     string         `gorm:"uniqueIndex;not null" json:"username"`
+	PasswordHash string         `gorm:"not null" json:"-"`
+	AvatarURL    *string        `json:"avatar_url"`
+	Role         UserRole       `gorm:"type:varchar(20);not null;default:'reader'" json:"role"`
+	IsBanned     bool           `gorm:"not null;default:false" json:"is_banned"`
+	BanReason    *string        `json:"ban_reason,omitempty"`
+	BanExpiresAt *time.Time     `json:"ban_expires_at,omitempty"`
+	BannedByID   *uint          `json:"banned_by_id,omitempty"`
+	BannedBy     *User          `gorm:"foreignKey:BannedByID" json:"banned_by,omitempty"`
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt    time.Time      `json:"created_at"`
 }
 
 type Team struct {
@@ -150,7 +150,7 @@ type Manga struct {
 	PublishedAt   *time.Time
 	Tags          []Tag     `gorm:"many2many:manga_tags;"`
 	Chapters      []Chapter `gorm:"foreignKey:MangaID;constraint:OnDelete:CASCADE;"`
-	AvgRating     float64   `json:"avg_rating" gorm:"->"` // Read-only field
+	AvgRating     float64   `json:"avg_rating" gorm:"->"`     // Read-only field
 	ChaptersCount int       `json:"chapters_count" gorm:"->"` // Read-only field
 }
 
@@ -215,7 +215,6 @@ type Comment struct {
 	Content       string        `gorm:"type:text;not null"`
 	DisplayStatus DisplayStatus `gorm:"type:varchar(20);not null;default:'active'"`
 	CreatedAt     time.Time
-	UpdatedAt     time.Time
 }
 
 type AdminLog struct {

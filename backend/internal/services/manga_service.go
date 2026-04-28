@@ -10,6 +10,7 @@ type MangaService interface {
 	GetLatestUpdated(limit, offset int) ([]models.Manga, error)
 	GetTrending(limit, offset int) ([]models.Manga, error)
 	GetMangaByID(id uint) (*models.Manga, error)
+	GetChapter(mangaID uint, chapterNum float64) (*models.Chapter, error)
 }
 
 type mangaService struct {
@@ -34,4 +35,8 @@ func (s *mangaService) GetTrending(limit, offset int) ([]models.Manga, error) {
 
 func (s *mangaService) GetMangaByID(id uint) (*models.Manga, error) {
 	return s.mangaRepo.GetByID(id)
+}
+
+func (s *mangaService) GetChapter(mangaID uint, chapterNum float64) (*models.Chapter, error) {
+	return s.mangaRepo.GetChapter(mangaID, chapterNum)
 }

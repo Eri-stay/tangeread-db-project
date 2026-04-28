@@ -130,6 +130,7 @@ func main() {
 			manga.GET("/latest", mangaHandler.GetLatestUpdated)
 			manga.GET("/trending", mangaHandler.GetTrending)
 			manga.GET("/:id", mangaHandler.GetMangaByID)
+			manga.GET("/:id/chapters/:number", mangaHandler.GetChapter)
 		}
 
 		// Admin routes (JWT required + admin role check inside handler)

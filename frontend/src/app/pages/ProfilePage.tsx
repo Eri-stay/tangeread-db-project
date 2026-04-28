@@ -174,52 +174,115 @@ export function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [bookmarks, setBookmarks] = useState<{ [key: string]: BookmarkManga[] }>({});
+  const [bookmarkCounts, setBookmarkCounts] = useState<{ [key: string]: number }>({});
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [bookmarksOffset, setBookmarksOffset] = useState(0);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [hasMoreBookmarks, setHasMoreBookmarks] = useState(true);
+  const LIMIT = 20;
 
   const apiUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8080/api';
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
+  const fetchProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
 
-        const response = await fetch(`${apiUrl}/users/profile`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setNickname(data.username || "");
-          setAvatar(data.avatar || "");
-          setEmail(data.email || "");
-          setRole(data.role || "");
+      const response = await fetch(`${apiUrl}/users/profile`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
+      });
 
-        const bRes = await fetch(`${apiUrl}/users/bookmarks`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (bRes.ok) {
-          const bData = await bRes.json();
+      if (response.ok) {
+        const data = await response.json();
+        setNickname(data.username || "");
+        setAvatar(data.avatar_url || "");
+        setEmail(data.email || "");
+        setRole(data.role || "");
+
+        // Sync with localStorage for header
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          user.avatar_url = data.avatar_url;
+          localStorage.setItem('user', JSON.stringify(user));
+          window.dispatchEvent(new Event("storage"));
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch profile", err);
+    }
+  };
+
+  const fetchBookmarks = async (offset: number, append = false) => {
+    try {
+      const token = localStorage.getItem('token');
+      const bRes = await fetch(`${apiUrl}/users/bookmarks?limit=${LIMIT}&offset=${offset}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (bRes.ok) {
+        const bJson = await bRes.json();
+        const bData = bJson.data || {};
+        const bCounts = bJson.counts || {};
+        
+        setBookmarkCounts(bCounts);
+
+        if (append) {
+          setBookmarks(prev => {
+            const next = { ...prev };
+            Object.keys(bData).forEach(key => {
+              next[key] = [...(next[key] || []), ...(bData[key] || [])];
+            });
+            return next;
+          });
+        } else {
           setBookmarks(bData);
         }
-
-        const hRes = await fetch(`${apiUrl}/users/history`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (hRes.ok) {
-          const hData = await hRes.json();
-          setHistory(hData);
-        }
-      } catch (err) {
-        console.error("Failed to fetch profile", err);
+        
+        // Simple check if we got any data
+        const totalFetched = Object.values(bData).reduce((acc: number, val: any) => acc + (val?.length || 0), 0);
+        setHasMoreBookmarks(totalFetched === LIMIT);
       }
-    };
+    } catch (e) { console.error(e); }
+  };
 
+  const fetchHistory = async (offset: number, append = false) => {
+    try {
+      const token = localStorage.getItem('token');
+      const hRes = await fetch(`${apiUrl}/users/history?limit=${LIMIT}&offset=${offset}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (hRes.ok) {
+        const hData = await hRes.json();
+        if (append) {
+          setHistory(prev => [...prev, ...(hData || [])]);
+        } else {
+          setHistory(hData || []);
+        }
+        setHasMoreHistory((hData?.length || 0) === LIMIT);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => {
     fetchProfile();
+    fetchBookmarks(0);
+    fetchHistory(0);
   }, [apiUrl]);
+
+  const handleLoadMoreHistory = () => {
+    const nextOffset = historyOffset + LIMIT;
+    setHistoryOffset(nextOffset);
+    fetchHistory(nextOffset, true);
+  };
+
+  const handleLoadMoreBookmarks = () => {
+    const nextOffset = bookmarksOffset + LIMIT;
+    setBookmarksOffset(nextOffset);
+    fetchBookmarks(nextOffset, true);
+  };
 
   const handleSaveNickname = async () => {
     setIsSaving(true);
@@ -306,7 +369,7 @@ export function ProfilePage() {
       const userStr = localStorage.getItem('user');
       if (userStr) {
         const user = JSON.parse(userStr);
-        user.avatar = newAvatarUrl; // Save clean URL to storage
+        user.avatar_url = newAvatarUrl; // Save clean URL to storage
         localStorage.setItem('user', JSON.stringify(user));
         window.dispatchEvent(new Event("storage"));
       }
@@ -367,7 +430,7 @@ export function ProfilePage() {
   };
 
   const currentBookmarks =
-    bookmarks[bookmarkCategory] || [];
+    (bookmarks && bookmarks[bookmarkCategory]) || [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -506,7 +569,7 @@ export function ProfilePage() {
                   Категорії
                 </h3>
                 <nav className="space-y-1">
-                  {Object.keys(mockBookmarks).map(
+                  {Object.keys(categoryLabels).map(
                     (category) => (
                       <button
                         key={category}
@@ -520,7 +583,7 @@ export function ProfilePage() {
                       >
                         {categoryLabels[category]}
                         <span className="ml-2 text-xs opacity-70">
-                          ({mockBookmarks[category].length})
+                          ({bookmarkCounts[category] || 0})
                         </span>
                       </button>
                     ),
@@ -563,13 +626,7 @@ export function ProfilePage() {
 
                 {/* List View */}
                 <div className="space-y-3">
-                  {currentBookmarks.length === 0 ? (
-                    <div className="bg-card border border-border rounded-lg p-12 text-center">
-                      <p className="text-muted-foreground">
-                        У цій категорії поки що немає манґи
-                      </p>
-                    </div>
-                  ) : (
+                  {currentBookmarks.length > 0 ? (
                     currentBookmarks.map((manga, idx) => (
                       <div key={manga.id}>
                         <Link
@@ -622,6 +679,28 @@ export function ProfilePage() {
                         )}
                       </div>
                     ))
+                  ) : (
+                    <div className="py-20 text-center">
+                      <div className="mb-4 text-muted-foreground">У цій категорії поки порожньо</div>
+                      <Link to="/catalog">
+                        <Button variant="outline" className="border-primary/50 text-primary hover:bg-primary/10">
+                          Знайти щось цікаве
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+
+                  {hasMoreBookmarks && currentBookmarks.length > 0 && (
+                    <div className="flex justify-center pt-4">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={handleLoadMoreBookmarks}
+                        className="text-primary hover:bg-primary/10"
+                      >
+                        Показати ще закладок
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -641,7 +720,8 @@ export function ProfilePage() {
               </div>
 
               <div className="divide-y divide-border">
-                {history.map((entry, idx) => (
+                {history && history.length > 0 ? (
+                  history.map((entry, idx) => (
                   <div key={entry.id}>
                     <Link
                       to={`/read/${entry.mangaId}/${entry.chapterNumber}`}
@@ -679,7 +759,30 @@ export function ProfilePage() {
                       </div>
                     )}
                   </div>
-                ))}
+                ))
+              ) : (
+                <div className="p-12 text-center">
+                  <div className="text-muted-foreground mb-4">Ви ще нічого не читали</div>
+                  <Link to="/catalog">
+                    <Button variant="outline" className="border-primary/50 text-primary hover:bg-primary/10">
+                      Перейти до каталогу
+                    </Button>
+                  </Link>
+                </div>
+              )}
+
+              {hasMoreHistory && history.length > 0 && (
+                <div className="p-4 flex justify-center border-t border-border">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleLoadMoreHistory}
+                    className="text-primary hover:bg-primary/10"
+                  >
+                    Завантажити давнішу історію
+                  </Button>
+                </div>
+              )}
               </div>
             </div>
           </TabsContent>

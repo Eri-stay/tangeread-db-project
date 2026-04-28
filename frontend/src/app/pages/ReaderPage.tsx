@@ -17,6 +17,8 @@ interface Comment {
   replies: Comment[];
 }
 
+const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
+
 export function ReaderPage() {
   const { id, chapter } = useParams<{ id: string; chapter: string }>();
   const navigate = useNavigate();
@@ -24,15 +26,56 @@ export function ReaderPage() {
   const [scrollDirection, setScrollDirection] = useState<'down' | 'up'>('down');
   const [lastScrollY, setLastScrollY] = useState(0);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
-  const [editingComment, setEditingComment] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState<string>('');
   const [sortingMode, setSortingMode] = useState<'Newest' | 'Oldest'>('Newest');
+
+  const [manga, setManga] = useState<any>(null);
+  const [chapterInfo, setChapterInfo] = useState<any>(null);
+  const [pages, setPages] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
   // Current logged-in user
   const currentUser = 'ihnore_ihor';
 
-  const manga = mockMangaList.find(m => m.id === id);
-  const currentChapter = parseInt(chapter || '1');
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      setError('');
+      try {
+        const [mRes, cRes] = await Promise.all([
+          fetch(`${apiUrl}/manga/${id}`),
+          fetch(`${apiUrl}/manga/${id}/chapters/${chapter}`)
+        ]);
+
+        if (!mRes.ok) throw new Error('Манґу не знайдено');
+        if (!cRes.ok) throw new Error('Розділ не знайдено');
+
+        const mData = await mRes.json();
+        const cData = await cRes.json();
+
+        setManga(mData.data);
+        setChapterInfo(cData.data);
+
+        // Parse pages
+        const rawPages = cData.data.PagesURL;
+        if (rawPages) {
+          try {
+            const parsed = JSON.parse(rawPages);
+            setPages(Array.isArray(parsed) ? parsed : []);
+          } catch {
+            // Fallback to comma separated
+            setPages(rawPages.split(',').map((s: string) => s.trim()));
+          }
+        }
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (id && chapter) loadData();
+  }, [id, chapter]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -57,25 +100,24 @@ export function ReaderPage() {
     setControlsVisible(!controlsVisible);
   };
 
-  if (!manga) {
-    return <div className="container mx-auto px-4 py-8">Манґу не знайдено</div>;
+  if (isLoading) {
+    return <div className="flex items-center justify-center min-h-screen text-muted-foreground">Завантаження розділу...</div>;
   }
 
-  // Mock manga pages
-  const mockPages = [
-    'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=800&h=1200&fit=crop',
-    'https://images.unsplash.com/photo-1618519764620-7403abdbdfe9?w=800&h=1200&fit=crop',
-    'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=800&h=1200&fit=crop',
-    'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&h=1200&fit=crop',
-    'https://images.unsplash.com/photo-1604073926896-ce89428b5e59?w=800&h=1200&fit=crop',
-  ];
+  if (error || !manga || !chapterInfo) {
+    return (
+      <div className="container mx-auto px-4 py-8 text-center">
+        <h1 className="text-2xl font-bold text-destructive mb-4">{error || 'Помилка завантаження'}</h1>
+        <Button onClick={() => navigate(-1)}>Повернутися назад</Button>
+      </div>
+    );
+  }
 
   const renderComment = (comment: Comment, depth: number = 0, parentAvatarOffset: number = 0) => {
     const marginLeft = depth * 48;
     const currentAvatarOffset = marginLeft + 0; // Avatar starts at marginLeft
     const isOwnComment = comment.author === currentUser;
     const isDeleted = comment.deleted;
-    const isEditing = editingComment === comment.id;
 
     return (
       <div key={comment.id} className="relative">
@@ -120,94 +162,46 @@ export function ReaderPage() {
                 <span className="text-xs text-muted-foreground">{comment.timestamp}</span>
               </div>
 
-              {/* Editing State */}
-              {isEditing ? (
-                <div className="space-y-2">
-                  <Textarea
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                    className="bg-secondary border-border focus:border-primary focus:ring-primary"
-                    rows={3}
-                    autoFocus
-                  />
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      className="bg-[#59631f] hover:bg-[#59631f]/90"
-                      onClick={() => {
-                        // In a real app, this would update the backend
-                        console.log('Saving comment:', editContent);
-                        setEditingComment(null);
-                      }}
-                    >
-                      Зберегти
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setEditingComment(null);
-                        setEditContent('');
-                      }}
-                    >
-                      Скасувати
-                    </Button>
-                  </div>
-                </div>
+              {/* Comment Content */}
+              {isDeleted ? (
+                <p className="text-sm leading-relaxed mb-2 text-muted-foreground italic">
+                  [Коментар видалено користувачем]
+                </p>
               ) : (
-                <>
-                  {/* Comment Content */}
-                  {isDeleted ? (
-                    <p className="text-sm leading-relaxed mb-2 text-muted-foreground italic">
-                      [Коментар видалено користувачем]
-                    </p>
-                  ) : (
-                    <p className="text-sm leading-relaxed mb-2">{comment.content}</p>
-                  )}
+                <p className="text-sm leading-relaxed mb-2">{comment.content}</p>
+              )}
 
-                  {/* Action Buttons */}
-                  {!isDeleted && (
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              {/* Action Buttons */}
+              {!isDeleted && (
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <button
+                    className="flex items-center gap-1 hover:text-primary transition-colors"
+                    onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
+                  >
+                    <Reply className="h-3 w-3" />
+                    <span>Відповісти</span>
+                  </button>
+
+                  {isOwnComment && (
+                    <>
                       <button
-                        className="flex items-center gap-1 hover:text-primary transition-colors"
-                        onClick={() => setReplyingTo(replyingTo === comment.id ? null : comment.id)}
+                        className="flex items-center gap-1 hover:text-destructive transition-colors"
+                        onClick={() => {
+                          // In a real app, this would soft-delete in the backend
+                          console.log('Deleting comment:', comment.id);
+                        }}
                       >
-                        <Reply className="h-3 w-3" />
-                        <span>Відповісти</span>
+                        <Trash2 className="h-3 w-3" />
+                        <span>Видалити</span>
                       </button>
-
-                      {isOwnComment && (
-                        <>
-                          <button
-                            className="flex items-center gap-1 hover:text-primary transition-colors"
-                            onClick={() => {
-                              setEditingComment(comment.id);
-                              setEditContent(comment.content);
-                            }}
-                          >
-                            <Pencil className="h-3 w-3" />
-                            <span>Редагувати</span>
-                          </button>
-                          <button
-                            className="flex items-center gap-1 hover:text-destructive transition-colors"
-                            onClick={() => {
-                              // In a real app, this would soft-delete in the backend
-                              console.log('Deleting comment:', comment.id);
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                            <span>Видалити</span>
-                          </button>
-                        </>
-                      )}
-                    </div>
+                    </>
                   )}
-                </>
+                </div>
               )}
             </div>
 
             {/* Reply Form */}
-            {replyingTo === comment.id && !isEditing && (
+            {replyingTo === comment.id && (
               <div className="mt-2 ml-4">
                 <Textarea
                   placeholder="Напишіть відповідь..."
@@ -256,9 +250,9 @@ export function ReaderPage() {
           </Button>
 
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">{manga.title}</span>
+            <span className="text-sm font-medium">{manga.TitleUa}</span>
             <span className="text-sm text-muted-foreground">•</span>
-            <span className="text-sm text-muted-foreground">Розділ {currentChapter}</span>
+            <span className="text-sm text-muted-foreground">Розділ {chapterInfo.ChapterNumber}</span>
           </div>
 
           <div className="flex gap-2">
@@ -277,15 +271,21 @@ export function ReaderPage() {
         className="max-w-4xl mx-auto pt-16 pb-8"
         onClick={toggleControls}
       >
-        {mockPages.map((page, idx) => (
-          <div key={idx} className="mb-1">
-            <ImageWithFallback
-              src={page}
-              alt={`Page ${idx + 1}`}
-              className="w-full h-auto"
-            />
+        {pages.length === 0 ? (
+          <div className="text-center py-20 text-muted-foreground">
+            Сторінки відсутні або ще завантажуються
           </div>
-        ))}
+        ) : (
+          pages.map((page, idx) => (
+            <div key={idx} className="mb-1">
+              <ImageWithFallback
+                src={page}
+                alt={`Page ${idx + 1}`}
+                className="w-full h-auto"
+              />
+            </div>
+          ))
+        )}
       </div>
 
       {/* Bottom Controls */}
@@ -297,8 +297,8 @@ export function ReaderPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => currentChapter > 1 && navigate(`/read/${id}/${currentChapter - 1}`)}
-            disabled={currentChapter <= 1}
+            onClick={() => chapterInfo.ChapterNumber > 1 && navigate(`/read/${id}/${chapterInfo.ChapterNumber - 1}`)}
+            disabled={chapterInfo.ChapterNumber <= 1}
             className="gap-2"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -318,8 +318,8 @@ export function ReaderPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => currentChapter < manga.chapters && navigate(`/read/${id}/${currentChapter + 1}`)}
-            disabled={currentChapter >= manga.chapters}
+            onClick={() => chapterInfo.ChapterNumber < (manga.chapters_count || 1000) && navigate(`/read/${id}/${chapterInfo.ChapterNumber + 1}`)}
+            disabled={chapterInfo.ChapterNumber >= (manga.chapters_count || 1000)}
             className="gap-2"
           >
             Наступний

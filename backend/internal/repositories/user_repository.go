@@ -15,8 +15,9 @@ type UserRepository interface {
 	Update(user *models.User) error
 	SoftDelete(id uint) error
 	Restore(id uint) error
-	GetBookmarks(userID uint) ([]models.BookmarkDTO, error)
-	GetHistory(userID uint) ([]models.HistoryDTO, error)
+	GetBookmarks(userID uint, limit, offset int) ([]models.BookmarkDTO, error)
+	GetBookmarkCounts(userID uint) (map[string]int, error)
+	GetHistory(userID uint, limit, offset int) ([]models.HistoryDTO, error)
 }
 
 type postgresUserRepository struct {
@@ -70,7 +71,7 @@ func (r *postgresUserRepository) Restore(id uint) error {
 	return r.db.Unscoped().Model(&models.User{}).Where("id = ?", id).Update("deleted_at", nil).Error
 }
 
-func (r *postgresUserRepository) GetBookmarks(userID uint) ([]models.BookmarkDTO, error) {
+func (r *postgresUserRepository) GetBookmarks(userID uint, limit, offset int) ([]models.BookmarkDTO, error) {
 	var bookmarks []models.BookmarkDTO
 	query := `
 SELECT 
@@ -91,12 +92,32 @@ LEFT JOIN chapters c ON c.id = rh.chapter_id
 LEFT JOIN manga_stats_mv ms ON ms.manga_id = m.id
 WHERE ums.user_id = ?
 ORDER BY ums.created_at DESC
+LIMIT ? OFFSET ?
 `
-	err := r.db.Raw(query, userID).Scan(&bookmarks).Error
+	err := r.db.Raw(query, userID, limit, offset).Scan(&bookmarks).Error
 	return bookmarks, err
 }
 
-func (r *postgresUserRepository) GetHistory(userID uint) ([]models.HistoryDTO, error) {
+func (r *postgresUserRepository) GetBookmarkCounts(userID uint) (map[string]int, error) {
+	type result struct {
+		Status string
+		Count  int
+	}
+	var results []result
+	err := r.db.Table("user_manga_statuses").
+		Select("status, count(*) as count").
+		Where("user_id = ?", userID).
+		Group("status").
+		Scan(&results).Error
+
+	counts := make(map[string]int)
+	for _, res := range results {
+		counts[res.Status] = res.Count
+	}
+	return counts, err
+}
+
+func (r *postgresUserRepository) GetHistory(userID uint, limit, offset int) ([]models.HistoryDTO, error) {
 	var history []models.HistoryDTO
 	query := `
 SELECT 
@@ -111,8 +132,8 @@ JOIN mangas m ON rh.manga_id = m.id
 JOIN chapters c ON rh.chapter_id = c.id
 WHERE rh.user_id = ?
 ORDER BY rh.updated_at DESC
-LIMIT 20
+LIMIT ? OFFSET ?
 `
-	err := r.db.Raw(query, userID).Scan(&history).Error
+	err := r.db.Raw(query, userID, limit, offset).Scan(&history).Error
 	return history, err
 }

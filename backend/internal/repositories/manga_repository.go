@@ -10,6 +10,7 @@ type MangaRepository interface {
 	GetLatestUpdated(limit, offset int) ([]models.Manga, error)
 	GetTrending(limit, offset int) ([]models.Manga, error)
 	GetByID(id uint) (*models.Manga, error)
+	GetChapter(mangaID uint, chapterNum float64) (*models.Chapter, error)
 }
 
 type postgresMangaRepository struct {
@@ -53,6 +54,15 @@ func (r *postgresMangaRepository) GetLatestUpdated(limit, offset int) ([]models.
 	return mangas, err
 }
 
+func (r *postgresMangaRepository) GetChapter(mangaID uint, chapterNum float64) (*models.Chapter, error) {
+	var chapter models.Chapter
+	err := r.db.Where("manga_id = ? AND chapter_number = ?", mangaID, chapterNum).First(&chapter).Error
+	if err != nil {
+		return nil, err
+	}
+	return &chapter, nil
+}
+
 func (r *postgresMangaRepository) GetByID(id uint) (*models.Manga, error) {
 	var manga models.Manga
 	err := r.db.Table("mangas").
@@ -61,7 +71,7 @@ func (r *postgresMangaRepository) GetByID(id uint) (*models.Manga, error) {
 		Preload("Tags").
 		Preload("Team").
 		Preload("Chapters", func(db *gorm.DB) *gorm.DB {
-			return db.Order("volume_number DESC, chapter_number DESC")
+			return db.Order("volume DESC, chapter_number DESC")
 		}).
 		First(&manga, id).Error
 

@@ -198,21 +198,61 @@ def main():
     """
     psycopg2.extras.execute_values(cur, insert_history_query, history_to_insert, page_size=5000)
 
-    # 5. Оновлення дат існуючих манг та розділів
-    print("5. Оновлення дат створення Манг та Розділів (розподіл на 7 місяців)...")
+    # 5. ГЕНЕРАЦІЯ РОЗДІЛІВ З НУЛЯ
+    print("5. Генерація нових розділів та сторінок для кожної манги...")
+    
+    # Отримуємо список авторів (тих, хто може завантажувати)
+    cur.execute("SELECT id FROM users WHERE role = 'author'")
+    authors = [r[0] for r in cur.fetchall()]
+    if not authors: # Якщо авторів немає, беремо будь-яких юзерів
+        cur.execute("SELECT id FROM users LIMIT 100")
+        authors = [r[0] for r in cur.fetchall()]
+
+    cur.execute("SELECT id, cover_url FROM mangas")
+    manga_info = {r[0]: r[1] for r in cur.fetchall()}
+
+    chapters_to_insert = []
+
     for mid in mangas:
         m_date = get_weighted_date(days_ago=210)
         cur.execute("UPDATE mangas SET created_at = %s WHERE id = %s", (m_date, mid))
         
-        chapters = manga_chapters.get(mid,[])
+        num_chapters = random.randint(10, 25) # Скільки розділів створити
         current_ch_date = m_date
+        cover_url = manga_info.get(mid, "https://placehold.co/800x1200?text=No+Cover")
         
-        for cid in chapters:
-            current_ch_date += timedelta(days=random.randint(1, 7), hours=random.randint(2, 20))
+        for ch_num in range(1, num_chapters + 1):
+            current_ch_date += timedelta(days=random.randint(2, 7), hours=random.randint(1, 12))
             if current_ch_date > datetime.now():
                 current_ch_date = datetime.now()
-                
-            cur.execute("UPDATE chapters SET created_at = %s WHERE id = %s", (current_ch_date, cid))
+            
+            # Генеруємо сторінки (Перша - обкладинка, далі плейсхолдери)
+            pages = [cover_url]
+            for p in range(2, random.randint(12, 20)):
+                pages.append(f"https://placehold.co/800x1200/222/white?text=Chapter+{ch_num}+Page+{p}")
+            
+            all_pages_string = ",".join(pages)
+            uploader_id = random.choice(authors)
+            
+            # Додаємо дані для вставки
+            # Поля: manga_id, chapter_number, uploader_id, display_status, view_count, created_at, pages_url
+            chapters_to_insert.append((
+                mid, 
+                float(ch_num), 
+                uploader_id, 
+                'active', 
+                random.randint(100, 10000), 
+                current_ch_date, 
+                all_pages_string
+            ))
+
+    # Виконуємо масову вставку розділів
+    insert_chapters_query = """
+        INSERT INTO chapters (manga_id, chapter_number, uploader_id, display_status, view_count, created_at, pages_url)
+        VALUES %s
+    """
+    psycopg2.extras.execute_values(cur, insert_chapters_query, chapters_to_insert, page_size=1000)
+    print(f"   Успішно створено {len(chapters_to_insert)} розділів.")
 
     # 6. Оновлюємо Materialized View
     print("6. Оновлення Materialized View для рейтингів...")
