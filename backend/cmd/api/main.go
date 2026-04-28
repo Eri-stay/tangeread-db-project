@@ -139,6 +139,10 @@ func main() {
 		{
 			admin.POST("/seed", adminHandler.RunSeed)
 			admin.DELETE("/seed", adminHandler.DeleteSeed)
+			admin.GET("/stats", adminHandler.GetPlatformStats)
+			admin.GET("/genre-stats", adminHandler.GetGenreStats)
+			admin.GET("/registration-stats", adminHandler.GetRegistrationStats)
+			admin.GET("/team-stats", adminHandler.GetTeamStats)
 		}
 
 		// Protected routes
