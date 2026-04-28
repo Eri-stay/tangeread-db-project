@@ -173,7 +173,10 @@ export function ProfilePage() {
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+  const [bookmarks, setBookmarks] = useState<{ [key: string]: BookmarkManga[] }>({});
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  const apiUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8080/api';
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -186,13 +189,29 @@ export function ProfilePage() {
             'Authorization': `Bearer ${token}`
           }
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           setNickname(data.username || "");
           setAvatar(data.avatar || "");
           setEmail(data.email || "");
           setRole(data.role || "");
+        }
+
+        const bRes = await fetch(`${apiUrl}/users/bookmarks`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (bRes.ok) {
+          const bData = await bRes.json();
+          setBookmarks(bData);
+        }
+
+        const hRes = await fetch(`${apiUrl}/users/history`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (hRes.ok) {
+          const hData = await hRes.json();
+          setHistory(hData);
         }
       } catch (err) {
         console.error("Failed to fetch profile", err);
@@ -215,16 +234,16 @@ export function ProfilePage() {
         },
         body: JSON.stringify({ username: nickname })
       });
-      
+
       if (!response.ok) {
         const data = await response.json();
         setError(data.error || "Помилка оновлення профілю");
         return;
       }
-      
+
       const data = await response.json();
       setNickname(data.user.username);
-      
+
       // Update local storage user info
       const userStr = localStorage.getItem('user');
       if (userStr) {
@@ -279,13 +298,15 @@ export function ProfilePage() {
       });
 
       if (!updateRes.ok) throw new Error('Update DB failed');
-      
-      setAvatar(newAvatarUrl);
-      
+
+      // Add timestamp to force browser refresh
+      const cacheBustedUrl = `${newAvatarUrl}?t=${Date.now()}`;
+      setAvatar(cacheBustedUrl);
+
       const userStr = localStorage.getItem('user');
       if (userStr) {
         const user = JSON.parse(userStr);
-        user.avatar = newAvatarUrl;
+        user.avatar = newAvatarUrl; // Save clean URL to storage
         localStorage.setItem('user', JSON.stringify(user));
         window.dispatchEvent(new Event("storage"));
       }
@@ -314,9 +335,9 @@ export function ProfilePage() {
       } else {
         setError("Помилка видалення акаунту");
       }
-    } catch(e) {
-        console.error(e);
-        setError("Помилка з'єднання при видаленні");
+    } catch (e) {
+      console.error(e);
+      setError("Помилка з'єднання при видаленні");
     }
   };
 
@@ -326,11 +347,10 @@ export function ProfilePage() {
         {[1, 2, 3, 4, 5].map((star) => (
           <Star
             key={star}
-            className={`h-4 w-4 ${
-              star <= rating
-                ? "fill-yellow-500 text-yellow-500"
-                : "text-muted-foreground/30"
-            }`}
+            className={`h-4 w-4 ${star <= rating
+              ? "fill-yellow-500 text-yellow-500"
+              : "text-muted-foreground/30"
+              }`}
           />
         ))}
       </div>
@@ -347,7 +367,7 @@ export function ProfilePage() {
   };
 
   const currentBookmarks =
-    mockBookmarks[bookmarkCategory] || [];
+    bookmarks[bookmarkCategory] || [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -369,24 +389,24 @@ export function ProfilePage() {
             <div className="relative group">
               <div className="w-32 h-32 rounded-full overflow-hidden bg-secondary border-2 border-border">
                 <ImageWithFallback
-                  src={avatar || "https://i.pinimg.com/736x/1f/05/46/1f05460f32bfad4949ee4f86100dc3d2.jpg"}
+                  src={avatar || "/no-avatar.jpg"}
                   alt="User Avatar"
                   className="w-full h-full object-cover"
                 />
               </div>
-              <button 
+              <button
                 className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Camera className="h-6 w-6 text-white" />
                 <span className="sr-only">Змінити фото</span>
               </button>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleAvatarUpload} 
-                accept="image/*" 
-                className="hidden" 
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleAvatarUpload}
+                accept="image/*"
+                className="hidden"
               />
               <p className="text-xs text-muted-foreground text-center mt-2 cursor-pointer hover:text-primary" onClick={() => fileInputRef.current?.click()}>
                 Змінити фото
@@ -431,7 +451,7 @@ export function ProfilePage() {
                   )}
                 </div>
                 {error && <p className="text-destructive text-sm mt-2">{error}</p>}
-                
+
                 <div className="mt-4 grid grid-cols-2 gap-4 max-w-md">
                   <div>
                     <Label className="text-sm font-medium mb-1 block text-muted-foreground">Email</Label>
@@ -493,11 +513,10 @@ export function ProfilePage() {
                         onClick={() =>
                           setBookmarkCategory(category)
                         }
-                        className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
-                          bookmarkCategory === category
-                            ? "bg-primary text-primary-foreground"
-                            : "hover:bg-secondary"
-                        }`}
+                        className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${bookmarkCategory === category
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-secondary"
+                          }`}
                       >
                         {categoryLabels[category]}
                         <span className="ml-2 text-xs opacity-70">
@@ -622,7 +641,7 @@ export function ProfilePage() {
               </div>
 
               <div className="divide-y divide-border">
-                {mockHistory.map((entry, idx) => (
+                {history.map((entry, idx) => (
                   <div key={entry.id}>
                     <Link
                       to={`/read/${entry.mangaId}/${entry.chapterNumber}`}
@@ -654,7 +673,7 @@ export function ProfilePage() {
                     </Link>
 
                     {/* Leaf divider */}
-                    {idx < mockHistory.length - 1 && (
+                    {idx < history.length - 1 && (
                       <div className="flex justify-center pb-1">
                         <LeafDivider className="h-3 w-auto text-primary/50" />
                       </div>

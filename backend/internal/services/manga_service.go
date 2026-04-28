@@ -6,9 +6,10 @@ import (
 )
 
 type MangaService interface {
-	GetMangaList(limit int) ([]models.Manga, error)
-	GetLatestUpdated(limit int) ([]models.Manga, error)
-	GetTrending(limit int) ([]models.Manga, error)
+	GetMangaList(limit, offset int) ([]models.Manga, error)
+	GetLatestUpdated(limit, offset int) ([]models.Manga, error)
+	GetTrending(limit, offset int) ([]models.Manga, error)
+	GetMangaByID(id uint) (*models.Manga, error)
 }
 
 type mangaService struct {
@@ -19,14 +20,18 @@ func NewMangaService(mangaRepo repositories.MangaRepository) MangaService {
 	return &mangaService{mangaRepo: mangaRepo}
 }
 
-func (s *mangaService) GetMangaList(limit int) ([]models.Manga, error) {
-	return s.mangaRepo.GetAll(limit)
+func (s *mangaService) GetMangaList(limit, offset int) ([]models.Manga, error) {
+	return s.mangaRepo.GetAll(limit, offset)
 }
 
-func (s *mangaService) GetLatestUpdated(limit int) ([]models.Manga, error) {
-	return s.mangaRepo.GetLatestUpdated(limit)
+func (s *mangaService) GetLatestUpdated(limit, offset int) ([]models.Manga, error) {
+	return s.mangaRepo.GetLatestUpdated(limit, offset)
 }
 
-func (s *mangaService) GetTrending(limit int) ([]models.Manga, error) {
-	return s.mangaRepo.GetTrending(limit)
+func (s *mangaService) GetTrending(limit, offset int) ([]models.Manga, error) {
+	return s.mangaRepo.GetTrending(limit, offset)
+}
+
+func (s *mangaService) GetMangaByID(id uint) (*models.Manga, error) {
+	return s.mangaRepo.GetByID(id)
 }

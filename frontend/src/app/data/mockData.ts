@@ -11,6 +11,7 @@ export interface Manga {
   format: string;
   lastUpdated: string;
   tags: string[];
+  team?: string;
 }
 
 export interface Chapter {

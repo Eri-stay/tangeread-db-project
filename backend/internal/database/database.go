@@ -89,7 +89,6 @@ func RunManualMigrations(db *gorm.DB) {
 		}
 	}
 
-	
 	mvSQL0 := `
 	DROP TRIGGER IF EXISTS trg_update_manga_avg_rating ON ratings;
 	DROP FUNCTION IF EXISTS update_manga_avg_rating_func();
@@ -98,19 +97,32 @@ func RunManualMigrations(db *gorm.DB) {
 		log.Printf("Error dropping trigger: %v", err)
 	}
 
-	mvSQL := `
-	CREATE MATERIALIZED VIEW IF NOT EXISTS manga_stats_mv AS
-	SELECT 
-		manga_id,
-		COALESCE(AVG(score), 0) AS avg_rating,
-		COUNT(score) AS rating_count
-	FROM ratings
-	GROUP BY manga_id;
+	// 4. Update Materialized View for statistics
+	log.Println("Updating Materialized View: manga_stats_mv...")
 
-	CREATE UNIQUE INDEX IF NOT EXISTS idx_manga_stats_mv_manga_id ON manga_stats_mv (manga_id);
-	`
-	if err := db.Exec(mvSQL).Error; err != nil {
-		log.Printf("Error creating MV: %v", err)
+	// Drop old view with cascade
+	db.Exec(`DROP MATERIALIZED VIEW IF EXISTS manga_stats_mv CASCADE;`)
+
+	// Create new view with chapter_count
+	createMVSQL := `
+	CREATE MATERIALIZED VIEW manga_stats_mv AS
+	SELECT 
+		m.id AS manga_id,
+		CAST(COALESCE(AVG(r.score), 0) AS DOUBLE PRECISION) AS avg_rating,
+		COUNT(DISTINCT r.user_id) AS rating_count,
+		COUNT(DISTINCT c.id) AS chapter_count
+	FROM mangas m
+	LEFT JOIN ratings r ON r.manga_id = m.id
+	LEFT JOIN chapters c ON c.manga_id = m.id AND c.display_status = 'active'
+	GROUP BY m.id;`
+
+	if err := db.Exec(createMVSQL).Error; err != nil {
+		log.Printf("!!! CRITICAL ERROR creating manga_stats_mv: %v", err)
+	}
+
+	// Re-create the unique index for concurrent refreshes
+	if err := db.Exec(`CREATE UNIQUE INDEX idx_manga_stats_mv_manga_id ON manga_stats_mv (manga_id);`).Error; err != nil {
+		log.Printf("Error creating index on MV: %v", err)
 	}
 
 	log.Println("Manual SQL migrations completed")

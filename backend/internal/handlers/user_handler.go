@@ -127,10 +127,10 @@ func (h *UserHandler) UploadAvatar(c *gin.Context) {
 	endpoint := os.Getenv("S3_ENDPOINT")
 	publicUrlBase := os.Getenv("S3_PUBLIC_URL")
 
-	// The actual S3 key inside the bucket includes the root "tangeread-media" 
+	// The actual S3 key inside the bucket includes the root "tangeread-media"
 	// because mediaStorage is initialized with it.
 	fullKey := fmt.Sprintf("tangeread-media/%s", fileName)
-	
+
 	var publicURL string
 	if publicUrlBase != "" {
 		// Use public R2.dev domain or custom domain if configured
@@ -143,7 +143,39 @@ func (h *UserHandler) UploadAvatar(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":   "Avatar uploaded successfully",
+		"message":    "Avatar uploaded successfully",
 		"avatar_url": publicURL,
 	})
+}
+
+func (h *UserHandler) GetBookmarks(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	bookmarks, err := h.userService.GetBookmarks(userID.(uint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, bookmarks)
+}
+
+func (h *UserHandler) GetHistory(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	history, err := h.userService.GetHistory(userID.(uint))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, history)
 }

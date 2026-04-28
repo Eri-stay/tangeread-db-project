@@ -2,15 +2,19 @@ package services
 
 import (
 	"errors"
+	"time"
 
 	"github.com/eri-stay/tangeread-db-project/backend/internal/models"
 	"github.com/eri-stay/tangeread-db-project/backend/internal/repositories"
+	"github.com/xeonx/timeago"
 )
 
 type UserService interface {
 	GetProfile(userID uint) (*models.User, error)
 	UpdateProfile(userID uint, username string, avatarURL *string) (*models.User, error)
 	SoftDeleteAccount(userID uint) error
+	GetBookmarks(userID uint) (map[string][]models.BookmarkDTO, error)
+	GetHistory(userID uint) ([]models.HistoryDTO, error)
 }
 
 type userService struct {
@@ -41,7 +45,6 @@ func (s *userService) UpdateProfile(userID uint, username string, avatarURL *str
 		return nil, errors.New("user not found")
 	}
 
-	// Only update username if provided and different
 	if username != "" && username != user.Username {
 		existingUser, err := s.userRepo.GetByUsername(username)
 		if err != nil {
@@ -53,7 +56,6 @@ func (s *userService) UpdateProfile(userID uint, username string, avatarURL *str
 		user.Username = username
 	}
 
-	// Update avatar if a non-nil pointer was provided
 	if avatarURL != nil {
 		user.AvatarURL = avatarURL
 	}
@@ -73,7 +75,47 @@ func (s *userService) SoftDeleteAccount(userID uint) error {
 	if user == nil {
 		return errors.New("user not found")
 	}
-
-	// Uses GORM's built-in Soft Delete because of the DeletedAt field on models.User
 	return s.userRepo.SoftDelete(userID)
+}
+
+func (s *userService) GetBookmarks(userID uint) (map[string][]models.BookmarkDTO, error) {
+	bookmarksList, err := s.userRepo.GetBookmarks(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := map[string][]models.BookmarkDTO{
+		"reading":   {},
+		"completed": {},
+		"planned":   {},
+		"rereading": {},
+		"on_hold":   {},
+		"dropped":   {},
+		"favorite":  {},
+	}
+
+	for _, b := range bookmarksList {
+		if b.Status != "" {
+			result[b.Status] = append(result[b.Status], b)
+		}
+		if b.IsFavorite {
+			result["favorite"] = append(result["favorite"], b)
+		}
+	}
+
+	return result, nil
+}
+
+func (s *userService) GetHistory(userID uint) ([]models.HistoryDTO, error) {
+	historyList, err := s.userRepo.GetHistory(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	loc, _ := time.LoadLocation("Europe/Kiev")
+	for i := range historyList {
+		historyList[i].TimeAgo = timeago.English.Format(historyList[i].UpdatedAt.In(loc))
+		}
+
+        return historyList, nil
 }

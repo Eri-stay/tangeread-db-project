@@ -19,17 +19,17 @@ export function CatalogPage() {
   const [filterMode, setFilterMode] = useState<'AND' | 'OR'>('AND');
   const [tagFilters, setTagFilters] = useState<TagFilters>({});
   const [sortBy, setSortBy] = useState('best-match');
-  
+
   // Status filters
   const [statusOngoing, setStatusOngoing] = useState(false);
   const [statusCompleted, setStatusCompleted] = useState(false);
   const [statusPaused, setStatusPaused] = useState(false);
-  
+
   // Type filters
   const [typeManga, setTypeManga] = useState(false);
   const [typeManhwa, setTypeManhwa] = useState(false);
   const [typeManhua, setTypeManhua] = useState(false);
-  
+
   // Year filter
   const [yearFilter, setYearFilter] = useState('all');
 
@@ -37,7 +37,7 @@ export function CatalogPage() {
     setTagFilters(prev => {
       const currentState = prev[tag] || 'neutral';
       let newState: TagState;
-      
+
       if (currentState === 'neutral') newState = 'include';
       else if (currentState === 'include') newState = 'exclude';
       else newState = 'neutral';
@@ -52,7 +52,7 @@ export function CatalogPage() {
   const getTagClassName = (tag: string) => {
     const state = tagFilters[tag] || 'neutral';
     const baseClass = "px-3 py-1.5 rounded border transition-all text-sm cursor-pointer inline-flex items-center gap-1";
-    
+
     if (state === 'include') {
       return `${baseClass} bg-primary text-primary-foreground border-primary`;
     } else if (state === 'exclude') {
@@ -124,8 +124,8 @@ export function CatalogPage() {
                   <Label className="text-sm mb-3 block font-semibold">Статус</Label>
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="status-ongoing" 
+                      <Checkbox
+                        id="status-ongoing"
                         checked={statusOngoing}
                         onCheckedChange={(checked) => setStatusOngoing(checked as boolean)}
                       />
@@ -134,8 +134,8 @@ export function CatalogPage() {
                       </label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="status-completed" 
+                      <Checkbox
+                        id="status-completed"
                         checked={statusCompleted}
                         onCheckedChange={(checked) => setStatusCompleted(checked as boolean)}
                       />
@@ -144,8 +144,8 @@ export function CatalogPage() {
                       </label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="status-paused" 
+                      <Checkbox
+                        id="status-paused"
                         checked={statusPaused}
                         onCheckedChange={(checked) => setStatusPaused(checked as boolean)}
                       />
@@ -182,8 +182,8 @@ export function CatalogPage() {
                   <Label className="text-sm mb-3 block font-semibold">Тип</Label>
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="type-manga" 
+                      <Checkbox
+                        id="type-manga"
                         checked={typeManga}
                         onCheckedChange={(checked) => setTypeManga(checked as boolean)}
                       />
@@ -192,8 +192,8 @@ export function CatalogPage() {
                       </label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="type-manhwa" 
+                      <Checkbox
+                        id="type-manhwa"
                         checked={typeManhwa}
                         onCheckedChange={(checked) => setTypeManhwa(checked as boolean)}
                       />
@@ -202,8 +202,8 @@ export function CatalogPage() {
                       </label>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Checkbox 
-                        id="type-manhua" 
+                      <Checkbox
+                        id="type-manhua"
                         checked={typeManhua}
                         onCheckedChange={(checked) => setTypeManhua(checked as boolean)}
                       />
@@ -228,36 +228,10 @@ export function CatalogPage() {
                 </div>
               </div>
 
-              {/* Themes */}
-              <div className="pt-4 border-t border-border/50 relative">
-                <div className="absolute -right-2 top-2 opacity-10">
-                  <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                    <path d="M8 36C8 36 20 28 28 12C28 12 36 20 28 36C20 36 8 36 8 36Z" fill="#59631f" />
-                  </svg>
-                </div>
-                <Label className="text-sm mb-3 block font-semibold">Теми</Label>
-                <div className="flex flex-wrap gap-2">
-                  {tags.themes.map(renderTag)}
-                </div>
-              </div>
-
-              {/* Format */}
-              <div className="pt-4 border-t border-border/50 relative">
-                <div className="absolute -right-2 top-2 opacity-10">
-                  <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                    <path d="M8 36C8 36 20 28 28 12C28 12 36 20 28 36C20 36 8 36 8 36Z" fill="#59631f" />
-                  </svg>
-                </div>
-                <Label className="text-sm mb-3 block font-semibold">Формат</Label>
-                <div className="flex flex-wrap gap-2">
-                  {tags.formats.map(renderTag)}
-                </div>
-              </div>
-
               {/* Reset Button */}
               <div className="flex justify-between w-full pt-4">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={resetFilters}
                   className="border-border"
                 >
@@ -270,22 +244,20 @@ export function CatalogPage() {
                   <div className="inline-flex rounded-md overflow-hidden border border-primary/30">
                     <button
                       onClick={() => setFilterMode('AND')}
-                      className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        filterMode === 'AND'
+                      className={`px-4 py-2 text-sm font-medium transition-colors ${filterMode === 'AND'
                           ? 'bg-[#aeba68] text-[#0a0a0a]'
                           : 'bg-secondary text-foreground hover:bg-secondary/80'
-                       }`}
+                        }`}
                     >
                       AND
                     </button>
                     <button
                       onClick={() => setFilterMode('OR')}
-                      className={`px-4 py-2 text-sm font-medium transition-colors border-l border-primary/30 ${
-                        filterMode === 'OR'
+                      className={`px-4 py-2 text-sm font-medium transition-colors border-l border-primary/30 ${filterMode === 'OR'
                           ? 'bg-[#aeba68] text-[#0a0a0a]'
                           : 'bg-secondary text-foreground hover:bg-secondary/80'
-                      }`}
-                      >
+                        }`}
+                    >
                       OR
                     </button>
                   </div>
@@ -314,8 +286,8 @@ export function CatalogPage() {
                 </SelectContent>
               </Select>
             </div>
-            
-          
+
+
             {/* Search Button */}
             <Button className="bg-primary hover:bg-primary/90 gap-2">
               Почати пошук
@@ -359,7 +331,7 @@ export function CatalogPage() {
                 <h3 className="font-semibold mb-1 group-hover:text-primary transition-colors">
                   {manga.title}
                 </h3>
-                
+
                 <div className="flex items-center gap-3 text-sm text-muted-foreground mb-2">
                   <div className="flex items-center gap-1">
                     <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />

@@ -6,11 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"gorm.io/gorm"
 
 	"github.com/eri-stay/tangeread-db-project/backend/internal/database"
 	"github.com/eri-stay/tangeread-db-project/backend/internal/handlers"
@@ -21,6 +23,22 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
+
+func startBackgroundTasks(db *gorm.DB) {
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := db.Exec("REFRESH MATERIALIZED VIEW CONCURRENTLY manga_stats_mv").Error; err != nil {
+					log.Printf("Background: Failed to refresh manga_stats_mv: %v", err)
+				}
+			}
+		}
+	}()
+}
 
 func main() {
 	// 1. Load environment variables
@@ -36,6 +54,9 @@ func main() {
 
 	// 2. Initialize Database and run migrations
 	database.InitDB(dsn)
+
+	// Start background workers
+	startBackgroundTasks(database.DB)
 
 	// 3. Initialize Repositories
 	userRepo := repositories.NewUserRepository(database.DB)
@@ -108,6 +129,7 @@ func main() {
 			manga.GET("", mangaHandler.GetMangaList)
 			manga.GET("/latest", mangaHandler.GetLatestUpdated)
 			manga.GET("/trending", mangaHandler.GetTrending)
+			manga.GET("/:id", mangaHandler.GetMangaByID)
 		}
 
 		// Admin routes (JWT required + admin role check inside handler)
@@ -124,6 +146,8 @@ func main() {
 		{
 			users.GET("/profile", userHandler.GetProfile)
 			users.PUT("/profile", userHandler.UpdateProfile)
+			users.GET("/bookmarks", userHandler.GetBookmarks)
+			users.GET("/history", userHandler.GetHistory)
 			users.POST("/avatar", userHandler.UploadAvatar)
 			users.DELETE("/account", userHandler.SoftDeleteAccount)
 		}

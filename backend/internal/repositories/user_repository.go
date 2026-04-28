@@ -15,6 +15,8 @@ type UserRepository interface {
 	Update(user *models.User) error
 	SoftDelete(id uint) error
 	Restore(id uint) error
+	GetBookmarks(userID uint) ([]models.BookmarkDTO, error)
+	GetHistory(userID uint) ([]models.HistoryDTO, error)
 }
 
 type postgresUserRepository struct {
@@ -66,4 +68,51 @@ func (r *postgresUserRepository) SoftDelete(id uint) error {
 
 func (r *postgresUserRepository) Restore(id uint) error {
 	return r.db.Unscoped().Model(&models.User{}).Where("id = ?", id).Update("deleted_at", nil).Error
+}
+
+func (r *postgresUserRepository) GetBookmarks(userID uint) ([]models.BookmarkDTO, error) {
+	var bookmarks []models.BookmarkDTO
+	query := `
+SELECT 
+m.id as id, 
+m.title_ua as title, 
+COALESCE(m.cover_url, '') as cover_image, 
+COALESCE(ra.score, 0) as rating,
+COALESCE(c.chapter_number, 0) as last_read_chapter,
+COALESCE(ms.chapter_count, 0) as total_chapters,
+ums.created_at::text as added_date,
+ums.status as status,
+ums.is_favorite as is_favorite
+FROM user_manga_statuses ums
+JOIN mangas m ON ums.manga_id = m.id
+LEFT JOIN ratings ra ON ra.user_id = ums.user_id AND ra.manga_id = m.id
+LEFT JOIN reading_histories rh ON rh.user_id = ums.user_id AND rh.manga_id = m.id
+LEFT JOIN chapters c ON c.id = rh.chapter_id
+LEFT JOIN manga_stats_mv ms ON ms.manga_id = m.id
+WHERE ums.user_id = ?
+ORDER BY ums.created_at DESC
+`
+	err := r.db.Raw(query, userID).Scan(&bookmarks).Error
+	return bookmarks, err
+}
+
+func (r *postgresUserRepository) GetHistory(userID uint) ([]models.HistoryDTO, error) {
+	var history []models.HistoryDTO
+	query := `
+SELECT 
+rh.chapter_id as id,
+m.id as manga_id,
+m.title_ua as manga_title,
+COALESCE(m.cover_url, '') as cover_image,
+c.chapter_number as chapter_number,
+rh.updated_at as updated_at
+FROM reading_histories rh
+JOIN mangas m ON rh.manga_id = m.id
+JOIN chapters c ON rh.chapter_id = c.id
+WHERE rh.user_id = ?
+ORDER BY rh.updated_at DESC
+LIMIT 20
+`
+	err := r.db.Raw(query, userID).Scan(&history).Error
+	return history, err
 }

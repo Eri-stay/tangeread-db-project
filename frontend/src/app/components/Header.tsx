@@ -6,36 +6,42 @@ import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { AuthModal } from './AuthModal';
+import { ImageWithFallback } from './figma/ImageWithFallback';
 
 export function Header() {
   const [searchQuery, setSearchQuery] = useState('');
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [user, setUser] = useState<{username: string, role: string} | null>(null);
+  const [user, setUser] = useState<{username: string, role: string, avatar?: string} | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
+  const updateUserFromStorage = () => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
       try {
         setUser(JSON.parse(userStr));
       } catch (e) {}
+    } else {
+      setUser(null);
     }
+  };
+
+  useEffect(() => {
+    updateUserFromStorage();
+    window.addEventListener('storage', updateUserFromStorage);
+    return () => window.removeEventListener('storage', updateUserFromStorage);
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
+    window.dispatchEvent(new Event("storage"));
     navigate('/');
   };
 
   const handleLoginSuccess = () => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        setUser(JSON.parse(userStr));
-      } catch (e) {}
-    }
+    updateUserFromStorage();
+    window.dispatchEvent(new Event("storage"));
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -126,16 +132,32 @@ export function Header() {
 
           {/* Profile Dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center justify-center h-10 w-10 rounded-full bg-secondary hover:bg-secondary/80 transition-colors border border-border/50">
-              <User className="h-5 w-5 text-foreground" />
+            <DropdownMenuTrigger className="flex items-center justify-center h-10 w-10 rounded-full overflow-hidden bg-secondary hover:bg-secondary/80 transition-colors border border-border/50">
+              {user?.avatar ? (
+                <ImageWithFallback 
+                  src={`${user.avatar}?t=${Date.now()}`} 
+                  alt={user.username} 
+                  className="w-full h-full object-cover" 
+                />
+              ) : (
+                <User className="h-5 w-5 text-foreground" />
+              )}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72 bg-card border-border">
               {user ? (
                 <>
                   <DropdownMenuLabel className="text-base">
                     <div className="flex items-center gap-3 py-2">
-                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                        <User className="h-5 w-5 text-primary" />
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center">
+                        {user.avatar ? (
+                          <ImageWithFallback 
+                            src={`${user.avatar}?t=${Date.now()}`} 
+                            alt={user.username} 
+                            className="w-full h-full object-cover" 
+                          />
+                        ) : (
+                          <User className="h-5 w-5 text-primary" />
+                        )}
                       </div>
                       <div>
                         <div className="font-semibold">{user.username}</div>

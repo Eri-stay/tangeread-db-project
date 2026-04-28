@@ -150,6 +150,8 @@ type Manga struct {
 	PublishedAt   *time.Time
 	Tags          []Tag     `gorm:"many2many:manga_tags;"`
 	Chapters      []Chapter `gorm:"foreignKey:MangaID;constraint:OnDelete:CASCADE;"`
+	AvgRating     float64   `json:"avg_rating" gorm:"->"` // Read-only field
+	ChaptersCount int       `json:"chapters_count" gorm:"->"` // Read-only field
 }
 
 type Tag struct {

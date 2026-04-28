@@ -1,15 +1,24 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
 import { Star, Bookmark, ArrowUpDown, ChevronLeft, ChevronRight, Eye, Upload, BookOpen, Check, Flag, RefreshCw, Pause, X, Heart } from 'lucide-react';
-import { mockMangaList, generateMockChapters } from '../data/mockData';
+import { mockMangaList, generateMockChapters, type Manga } from '../data/mockData';
 import { Button } from '../components/ui/button';
 import { MangaCard } from '../components/MangaCard';
+import { Loader2, AlertCircle } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { AuthModal } from '../components/AuthModal';
 
+const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
+
 export function MangaDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [manga, setManga] = useState<Manga | null>(null);
+  const [chapters, setChapters] = useState<any[]>([]);
+  const [trending, setTrending] = useState<Manga[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(0);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -29,7 +38,63 @@ export function MangaDetailPage() {
     }
   }, []);
 
-  // Values must match DB list_status enum exactly
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        const [mangaRes, trendingRes] = await Promise.all([
+          fetch(`${apiUrl}/manga/${id}`),
+          fetch(`${apiUrl}/manga/trending?limit=10`)
+        ]);
+
+        if (!mangaRes.ok) throw new Error('Манґу не знайдено');
+        
+        const mangaJson = await mangaRes.json();
+        const trendingJson = await trendingRes.json();
+
+        const b = mangaJson.data;
+        const mappedTags = b.Tags?.map((t: any) => t.NameUk || t.NameEn) || [];
+        
+        const mappedManga: Manga = {
+          id: String(b.ID),
+          title: b.TitleUa || b.TitleEn || 'Невідома назва',
+          coverImage: b.CoverURL || 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=800&q=80',
+          author: b.Author || 'Невідомо',
+          rating: b.avg_rating || 0,
+          chapters: b.chapters_count || 0,
+          genres: mappedTags.slice(0, 3),
+          tags: mappedTags,
+          description: b.Description || 'Опис відсутній',
+          status: b.Status || 'ongoing',
+          format: b.Format || 'manga',
+          lastUpdated: b.UpdatedAt ? new Date(b.UpdatedAt).toISOString().split('T')[0] : 'Невідомо',
+          team: b.Team?.Name || 'Немає команди',
+        };
+
+        setManga(mappedManga);
+        setChapters(b.Chapters || []);
+        
+        if (trendingJson.data) {
+          const mappedTrending = trendingJson.data.map((m: any) => ({
+            id: String(m.ID),
+            title: m.TitleUa || m.TitleEn || 'Невідома назва',
+            coverImage: m.CoverURL || '',
+            rating: m.avg_rating || 0,
+            chapters: m.chapters_count || 0,
+            genres: m.Tags?.slice(0, 3).map((t: any) => t.NameUk || t.NameEn) || [],
+          }));
+          setTrending(mappedTrending);
+        }
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (id) loadData();
+  }, [id]);
+  
   const bookmarkOptions = [
     { value: 'reading', label: 'Читаю', icon: BookOpen },
     { value: 'completed', label: 'Прочитано', icon: Check },
@@ -39,21 +104,34 @@ export function MangaDetailPage() {
     { value: 'dropped', label: 'Покинуто', icon: X },
   ];
 
-  const manga = mockMangaList.find(m => m.id === id);
-  
-  if (!manga) {
-    return <div className="container mx-auto px-4 py-8">Манґу не знайдено</div>;
-  }
-
-  const allChapters = generateMockChapters(manga.chapters);
-  const sortedChapters = sortOrder === 'desc' ? allChapters : [...allChapters].reverse();
-  
   const chaptersPerPage = 20;
+  const sortedChapters = sortOrder === 'desc' ? [...chapters].sort((a, b) => b.number - a.number) : [...chapters].sort((a, b) => a.number - b.number);
   const totalPages = Math.ceil(sortedChapters.length / chaptersPerPage);
   const currentChapters = sortedChapters.slice(
     currentPage * chaptersPerPage,
     (currentPage + 1) * chaptersPerPage
   );
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-muted-foreground">
+        <Loader2 className="w-12 h-12 animate-spin mb-4 text-primary" />
+        <p>Завантаження інформації про манґу...</p>
+      </div>
+    );
+  }
+
+  if (error || !manga) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-destructive">
+        <AlertCircle className="w-12 h-12 mb-4" />
+        <p className="text-lg font-medium">{error || 'Манґу не знайдено'}</p>
+        <Button onClick={() => window.location.reload()} variant="outline" className="mt-4">
+          Спробувати знову
+        </Button>
+      </div>
+    );
+  }
 
   const handleBookmark = () => {
     if (!user) {
@@ -269,21 +347,21 @@ export function MangaDetailPage() {
           <div className="space-y-2">
             {currentChapters.map((chapter) => (
               <Link
-                key={chapter.id}
-                to={`/read/${manga.id}/${chapter.number}`}
+                key={chapter.ID}
+                to={`/read/${manga.id}/${chapter.ChapterNumber}`}
                 className="flex items-center justify-between p-3 rounded hover:bg-secondary transition-colors border border-transparent hover:border-primary/30 group"
               >
                 <div className="flex items-center gap-3">
                   <span className="font-medium group-hover:text-primary transition-colors">
-                    {chapter.title}
+                    Том {chapter.VolumeNumber} Розділ {chapter.ChapterNumber} {chapter.Title ? `- ${chapter.Title}` : ''}
                   </span>
                   <span className="text-sm text-muted-foreground">
-                    {chapter.releaseDate}
+                    {chapter.CreatedAt ? new Date(chapter.CreatedAt).toLocaleDateString('uk-UA') : 'Невідомо'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Eye className="h-4 w-4" />
-                  <span>{chapter.views.toLocaleString()}</span>
+                  <span>{(chapter.Views || 0).toLocaleString()}</span>
                 </div>
               </Link>
             ))}
@@ -292,7 +370,7 @@ export function MangaDetailPage() {
           {/* Pagination */}
           <div className="flex items-center justify-between mt-6 pt-6 border-t border-border">
             <div className="text-sm text-muted-foreground">
-              Показано {currentPage * chaptersPerPage + 1} до {Math.min((currentPage + 1) * chaptersPerPage, sortedChapters.length)} з {sortedChapters.length} записів
+              Показано {currentPage * chaptersPerPage + 1} до {Math.min((currentPage + 1) * chaptersPerPage, sortedChapters.length)} з {sortedChapters.length} розділів
             </div>
             <div className="flex gap-2">
               <Button
@@ -318,11 +396,11 @@ export function MangaDetailPage() {
           </div>
         </div>
 
-        {/* Similar Manga Section */}
+        {/* Similar Manga Section - Using popular for now */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-semibold flex items-center gap-2">
-              Схожа манга
+              Схожа манґа
               <div className="h-px w-12 bg-primary/30" />
             </h2>
             <div className="flex gap-2">
@@ -349,7 +427,8 @@ export function MangaDetailPage() {
             className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth pb-4"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
-            {mockMangaList.filter(m => m.id !== manga.id).slice(0, 8).map((m) => (
+            {/* Just show trending manga as similar for now */}
+            {trending.filter(m => m.id !== manga.id).slice(0, 8).map((m) => (
               <MangaCard key={m.id} manga={m} />
             ))}
           </div>
