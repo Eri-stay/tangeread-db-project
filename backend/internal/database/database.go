@@ -79,7 +79,6 @@ func RunManualMigrations(db *gorm.DB) {
 
 	// 3. Create B-Tree indices for frequently sorted/filtered fields
 	bTreeIndices := []string{
-		`CREATE INDEX IF NOT EXISTS idx_mangas_avg_rating ON mangas (avg_rating);`,
 		`CREATE INDEX IF NOT EXISTS idx_mangas_status ON mangas (status);`,
 		`CREATE INDEX IF NOT EXISTS idx_mangas_display_status ON mangas (display_status);`,
 	}
@@ -90,34 +89,28 @@ func RunManualMigrations(db *gorm.DB) {
 		}
 	}
 
-	// 4. Create trigger for updating avg_rating in mangas
-	triggerSQL := `
-	CREATE OR REPLACE FUNCTION update_manga_avg_rating_func()
-	RETURNS TRIGGER AS $$
-	BEGIN
-		IF (TG_OP = 'DELETE') THEN
-			UPDATE mangas
-			SET avg_rating = COALESCE((SELECT AVG(score) FROM ratings WHERE manga_id = OLD.manga_id), 0)
-			WHERE id = OLD.manga_id;
-			RETURN OLD;
-		ELSE
-			UPDATE mangas
-			SET avg_rating = COALESCE((SELECT AVG(score) FROM ratings WHERE manga_id = NEW.manga_id), 0)
-			WHERE id = NEW.manga_id;
-			RETURN NEW;
-		END IF;
-	END;
-	$$ LANGUAGE plpgsql;
-
-	DROP TRIGGER IF EXISTS trg_update_manga_avg_rating ON ratings;
 	
-	CREATE TRIGGER trg_update_manga_avg_rating
-	AFTER INSERT OR UPDATE OR DELETE ON ratings
-	FOR EACH ROW EXECUTE FUNCTION update_manga_avg_rating_func();
+	mvSQL0 := `
+	DROP TRIGGER IF EXISTS trg_update_manga_avg_rating ON ratings;
+	DROP FUNCTION IF EXISTS update_manga_avg_rating_func();
 	`
+	if err := db.Exec(mvSQL0).Error; err != nil {
+		log.Printf("Error dropping trigger: %v", err)
+	}
 
-	if err := db.Exec(triggerSQL).Error; err != nil {
-		log.Printf("Warning: failed to create trigger update_manga_avg_rating: %v", err)
+	mvSQL := `
+	CREATE MATERIALIZED VIEW IF NOT EXISTS manga_stats_mv AS
+	SELECT 
+		manga_id,
+		COALESCE(AVG(score), 0) AS avg_rating,
+		COUNT(score) AS rating_count
+	FROM ratings
+	GROUP BY manga_id;
+
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_manga_stats_mv_manga_id ON manga_stats_mv (manga_id);
+	`
+	if err := db.Exec(mvSQL).Error; err != nil {
+		log.Printf("Error creating MV: %v", err)
 	}
 
 	log.Println("Manual SQL migrations completed")

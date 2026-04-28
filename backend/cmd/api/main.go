@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -72,9 +74,15 @@ func main() {
 	_ = mediaStorage // Prevent unused variable error for now until injected
 
 	// 6. Initialize Handlers
+	_, currentFile, _, _ := runtime.Caller(0)
+	// seed.py lives two directories up from cmd/api/main.go
+	seedScript := filepath.Join(filepath.Dir(currentFile), "..", "..", "..", "seed.py")
+	seedScript = filepath.Clean(seedScript)
+
 	authHandler := handlers.NewAuthHandler(authService)
 	userHandler := handlers.NewUserHandler(userService, mediaStorage)
 	mangaHandler := handlers.NewMangaHandler(mangaService)
+	adminHandler := handlers.NewAdminHandler(database.DB, seedScript)
 
 	// 7. Setup Gin Router
 	r := gin.Default()
@@ -98,6 +106,16 @@ func main() {
 		manga := api.Group("/manga")
 		{
 			manga.GET("", mangaHandler.GetMangaList)
+			manga.GET("/latest", mangaHandler.GetLatestUpdated)
+			manga.GET("/trending", mangaHandler.GetTrending)
+		}
+
+		// Admin routes (JWT required + admin role check inside handler)
+		admin := api.Group("/admin")
+		admin.Use(handlers.JWTMiddleware())
+		{
+			admin.POST("/seed", adminHandler.RunSeed)
+			admin.DELETE("/seed", adminHandler.DeleteSeed)
 		}
 
 		// Protected routes

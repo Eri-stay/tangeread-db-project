@@ -4,18 +4,47 @@ import { MangaCard } from '../components/MangaCard';
 import type { Manga } from '../data/mockData';
 import { Button } from '../components/ui/button';
 
+const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
+
+function mapManga(b: any): Manga {
+  const mappedTags = b.Tags && b.Tags.length > 0 
+    ? b.Tags.map((t: any) => t.NameUk || t.NameEn || '') 
+    : ['Фентезі'];
+
+  return {
+    id: String(b.ID),
+    title: b.TitleUa || 'Невідома назва',
+    author: b.Team?.Name || 'Невідомо',
+    coverImage: b.CoverURL || 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=800&q=80',
+    rating: b.AvgRating || 0,
+    status: b.Status || 'ongoing',
+    format: b.Format || 'manga',
+    chapters: b.Chapters ? b.Chapters.length : 0,
+    description: b.Description || '',
+    genres: mappedTags,
+    tags: mappedTags,
+    lastUpdated: b.UpdatedAt ? new Date(b.UpdatedAt).toISOString().split('T')[0] : '2026-04-27',
+  };
+}
+
+async function fetchSection(endpoint: string, limit: number): Promise<Manga[]> {
+  const res = await fetch(`${apiUrl}${endpoint}?limit=${limit}`);
+  if (!res.ok) throw new Error('fetch error');
+  const json = await res.json();
+  return (json.data || []).map(mapManga);
+}
+
 export function HomePage() {
   const [forYouScroll, setForYouScroll] = useState(0);
-  const [continueScroll, setContinueScroll] = useState(0);
   const [trendingScroll, setTrendingScroll] = useState(0);
   const [latestPage, setLatestPage] = useState(0);
 
-  const [mangaList, setMangaList] = useState<Manga[]>([]);
+  const [trending, setTrending] = useState<Manga[]>([]);
+  const [latest, setLatest] = useState<Manga[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
   const forYouRef = useRef<HTMLDivElement>(null);
-  const continueRef = useRef<HTMLDivElement>(null);
   const trendingRef = useRef<HTMLDivElement>(null);
 
   const scrollContainer = (ref: React.RefObject<HTMLDivElement>, direction: 'left' | 'right') => {
@@ -29,73 +58,48 @@ export function HomePage() {
 
   useEffect(() => {
     const handleScroll = (ref: React.RefObject<HTMLDivElement>, setter: (val: number) => void) => {
-      if (ref.current) {
-        setter(ref.current.scrollLeft);
-      }
+      if (ref.current) setter(ref.current.scrollLeft);
     };
 
     const forYouCurrent = forYouRef.current;
-    const continueCurrent = continueRef.current;
     const trendingCurrent = trendingRef.current;
 
     const forYouHandler = () => handleScroll(forYouRef, setForYouScroll);
-    const continueHandler = () => handleScroll(continueRef, setContinueScroll);
     const trendingHandler = () => handleScroll(trendingRef, setTrendingScroll);
 
     forYouCurrent?.addEventListener('scroll', forYouHandler);
-    continueCurrent?.addEventListener('scroll', continueHandler);
     trendingCurrent?.addEventListener('scroll', trendingHandler);
 
     return () => {
       forYouCurrent?.removeEventListener('scroll', forYouHandler);
-      continueCurrent?.removeEventListener('scroll', continueHandler);
       trendingCurrent?.removeEventListener('scroll', trendingHandler);
     };
   }, []);
 
   useEffect(() => {
-    const fetchMangas = async () => {
+    const load = async () => {
       setIsLoading(true);
       setError('');
       try {
-        // Щоб TS не сварився на .env, можна використати cast до any або налаштувати d.ts
-        const env = (import.meta as any).env;
-        const apiUrl = env.VITE_API_URL || 'http://localhost:8080/api';
-
-        const res = await fetch(`${apiUrl}/manga`);
-        if (!res.ok) throw new Error('Failed to fetch data');
-
-        const json = await res.json();
-
-        const mappedData: Manga[] = (json.data || []).map((b: any) => ({
-          id: String(b.ID),
-          title: b.TitleUa || 'Невідома назва',
-          author: 'Невідомо',
-          coverImage: b.CoverURL || 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=800&q=80',
-          rating: b.AvgRating || 0,
-          status: b.Status || 'ongoing',
-          format: 'Manga',
-          chapters: b.Chapters ? b.Chapters.length : 0,
-          description: b.Description || '',
-          genres: b.Tags && b.Tags.length > 0 ? b.Tags.map((t: any) => t.Name) : ['Фентезі']
-        }));
-
-        setMangaList(mappedData);
-      } catch (err) {
+        const [trendingData, latestData] = await Promise.all([
+          fetchSection('/manga/trending', 12),
+          fetchSection('/manga/latest', 30),
+        ]);
+        setTrending(trendingData);
+        setLatest(latestData);
+      } catch {
         setError('Не вдалося завантажити дані з сервера');
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchMangas();
+    load();
   }, []);
 
-  const latestUpdates = mangaList.length > 0
-    ? Array.from({ length: 30 }, (_, i) => mangaList[i % mangaList.length])
-    : [];
   const itemsPerPage = 30;
-  const totalPages = Math.max(1, Math.ceil(latestUpdates.length / itemsPerPage));
+  const totalPages = Math.max(1, Math.ceil(latest.length / itemsPerPage));
+  const latestPage0 = Math.min(latestPage, totalPages - 1);
+  const latestVisible = latest.slice(latestPage0 * itemsPerPage, (latestPage0 + 1) * itemsPerPage);
 
   return (
     <div className="min-h-screen bg-background pb-12">
@@ -134,69 +138,20 @@ export function HomePage() {
 
         {!isLoading && !error && (
           <>
-            {/* Section 1: For You */}
+            {/* Section 1: Trending (Popular this week) */}
             <section className="mb-12">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-semibold flex items-center gap-2">
-                  Для вас
-                  <div className="h-px w-12 bg-primary/30" />
-                </h2>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="icon" onClick={() => scrollContainer(forYouRef, 'left')} className="h-8 w-8 border-border/50">
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" onClick={() => scrollContainer(forYouRef, 'right')} className="h-8 w-8 border-border/50">
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+                <div>
+                  <h2 className="text-2xl font-semibold flex items-center gap-2">
+                    Популярне
+                    <div className="h-px w-12 bg-primary/30" />
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    За рейтингами цього тижня (+ ½ від минулого)
+                  </p>
                 </div>
-              </div>
-              <div
-                ref={forYouRef}
-                className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth pb-4"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-              >
-                {mangaList.length === 0 ? (
-                  <p className="text-muted-foreground">Немає доступної манґи</p>
-                ) : (
-                  mangaList.slice(0, 8).map((manga) => (
-                    <MangaCard key={manga.id} manga={manga} />
-                  ))
-                )}
-              </div>
-            </section>
-
-            {/* Section 2: Continue Reading */}
-            <section className="mb-12">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-semibold flex items-center gap-2">
-                  Продовжити читати
-                  <div className="h-px w-12 bg-primary/30" />
-                </h2>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="icon" onClick={() => scrollContainer(continueRef, 'left')} className="h-8 w-8 border-border/50">
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" onClick={() => scrollContainer(continueRef, 'right')} className="h-8 w-8 border-border/50">
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-              <div ref={continueRef} className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth pb-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                {mangaList.slice(0, 8).map((manga) => (
-                  <MangaCard key={manga.id} manga={manga} />
-                ))}
-              </div>
-            </section>
-
-            {/* Section 3: Trending */}
-            <section className="mb-12">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-semibold flex items-center gap-2">
-                  Популярне
-                  <div className="h-px w-12 bg-primary/30" />
-                </h2>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="icon" onClick={() => scrollContainer(trendingRef, 'left')} className="h-8 w-8 border-border/50">
+                  <Button variant="outline" size="icon" onClick={() => scrollContainer(trendingRef, 'left')} disabled={trendingScroll === 0} className="h-8 w-8 border-border/50">
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                   <Button variant="outline" size="icon" onClick={() => scrollContainer(trendingRef, 'right')} className="h-8 w-8 border-border/50">
@@ -205,44 +160,74 @@ export function HomePage() {
                 </div>
               </div>
               <div ref={trendingRef} className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth pb-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                {[...mangaList].sort((a, b) => b.rating - a.rating).slice(0, 8).map((manga) => (
-                  <MangaCard key={manga.id} manga={manga} />
-                ))}
+                {trending.length === 0 ? (
+                  <p className="text-muted-foreground">Немає даних</p>
+                ) : (
+                  trending.map((manga) => <MangaCard key={manga.id} manga={manga} />)
+                )}
               </div>
             </section>
 
-            {/* Section 4: Latest Updates */}
-            <section>
+            {/* Section 2: For You (same as trending, slice 0-8 for variety) */}
+            <section className="mb-12">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-semibold flex items-center gap-2">
-                  Останні оновлення
+                  Для вас
                   <div className="h-px w-12 bg-primary/30" />
                 </h2>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="icon" onClick={() => setLatestPage(prev => Math.max(0, prev - 1))} disabled={latestPage === 0} className="h-8 w-8 border-border/50">
+                  <Button variant="outline" size="icon" onClick={() => scrollContainer(forYouRef, 'left')} disabled={forYouScroll === 0} className="h-8 w-8 border-border/50">
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <Button variant="outline" size="icon" onClick={() => setLatestPage(prev => Math.min(totalPages - 1, prev + 1))} disabled={latestPage === totalPages - 1} className="h-8 w-8 border-border/50">
+                  <Button variant="outline" size="icon" onClick={() => scrollContainer(forYouRef, 'right')} className="h-8 w-8 border-border/50">
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div ref={forYouRef} className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth pb-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {latest.slice(0, 8).map((manga) => <MangaCard key={manga.id} manga={manga} />)}
+              </div>
+            </section>
+
+            {/* Section 3: Latest Updates */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-2xl font-semibold flex items-center gap-2">
+                    Останні оновлення
+                    <div className="h-px w-12 bg-primary/30" />
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1">Нові розділи</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="icon" onClick={() => setLatestPage(prev => Math.max(0, prev - 1))} disabled={latestPage0 === 0} className="h-8 w-8 border-border/50">
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="icon" onClick={() => setLatestPage(prev => Math.min(totalPages - 1, prev + 1))} disabled={latestPage0 === totalPages - 1} className="h-8 w-8 border-border/50">
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 mb-6">
-                {latestUpdates.map((manga, idx) => (
-                  <MangaCard key={`${manga.id}-${idx}`} manga={manga} />
-                ))}
+                {latestVisible.length === 0 ? (
+                  <p className="text-muted-foreground col-span-full">Немає оновлень</p>
+                ) : (
+                  latestVisible.map((manga, idx) => (
+                    <MangaCard key={`${manga.id}-${idx}`} manga={manga} />
+                  ))
+                )}
               </div>
 
               {/* Pagination */}
               <div className="flex items-center justify-center gap-2">
-                <Button variant="outline" size="icon" onClick={() => setLatestPage(prev => Math.max(0, prev - 1))} disabled={latestPage === 0} className="h-8 w-8 border-border/50">
+                <Button variant="outline" size="icon" onClick={() => setLatestPage(prev => Math.max(0, prev - 1))} disabled={latestPage0 === 0} className="h-8 w-8 border-border/50">
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <span className="text-sm text-muted-foreground">
-                  Сторінка {latestPage + 1} з {totalPages}
+                  Сторінка {latestPage0 + 1} з {totalPages}
                 </span>
-                <Button variant="outline" size="icon" onClick={() => setLatestPage(prev => Math.min(totalPages - 1, prev + 1))} disabled={latestPage === totalPages - 1} className="h-8 w-8 border-border/50">
+                <Button variant="outline" size="icon" onClick={() => setLatestPage(prev => Math.min(totalPages - 1, prev + 1))} disabled={latestPage0 === totalPages - 1} className="h-8 w-8 border-border/50">
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>

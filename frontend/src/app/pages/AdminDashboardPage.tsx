@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Users, BookOpen, Image, AlertTriangle, AlertCircle, PieChart, List, TrendingUp, TrendingDown, Shield, FileWarning, Link as LinkIcon } from 'lucide-react';
+import { Users, BookOpen, Image, AlertTriangle, AlertCircle, PieChart, List, TrendingUp, TrendingDown, Shield, FileWarning, Link as LinkIcon, Database, Play, Trash2, Loader2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { AdminLayout } from '../components/AdminLayout';
 import { Button } from '../components/ui/button';
@@ -54,6 +54,39 @@ const badgeColors = {
 
 export function AdminDashboardPage() {
   const [viewMode, setViewMode] = useState<'chart' | 'list'>('chart');
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const env = (import.meta as any).env;
+  const apiUrl = env?.VITE_API_URL || 'http://localhost:8080/api';
+
+  const handleAdminAction = async (endpoint: string, method: string, setLoader: (v: boolean) => void) => {
+    setLoader(true);
+    setMessage(null);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/admin/${endpoint}`, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.error || 'Дія не вдалася');
+      
+      setMessage({ text: data.message || 'Успішно виконано', type: 'success' });
+      if (endpoint === 'seed' && method === 'DELETE') {
+        // Maybe reload page or update stats?
+        window.location.reload();
+      }
+    } catch (err: any) {
+      setMessage({ text: err.message, type: 'error' });
+    } finally {
+      setLoader(false);
+    }
+  };
 
   const totalGenreViews = genreData.reduce((sum, genre) => sum + genre.value, 0);
 
@@ -329,31 +362,60 @@ export function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Moderation Overview */}
-        <div className="bg-card border border-destructive/30 rounded-lg p-6">
+        {/* Database Management */}
+        <div className="bg-card border border-border rounded-lg p-6 mt-8">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-destructive/10 rounded-lg">
-              <AlertCircle className="h-6 w-6" />
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Database className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold">Огляд модерації</h2>
-              <p className="text-sm text-muted-foreground">Очікують затвердження</p>
+              <h2 className="text-xl font-semibold">Керування базою даних</h2>
+              <p className="text-sm text-muted-foreground">Інструменти для розробки та тестування</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Pending Teams */}
+          {message && (
+            <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
+              message.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-destructive/10 text-destructive border border-destructive/20'
+            }`}>
+              {message.type === 'success' ? <Shield className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+              <span className="text-sm font-medium">{message.text}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="p-4 bg-secondary/30 rounded-lg border border-border">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-primary" />
-                  <span className="font-medium">Заявки на команди</span>
-                </div>
-                <span className="text-2xl font-bold text-primary">5</span>
-              </div>
-              <Button variant="outline" size="sm" className="w-full gap-2" disabled>
-                <LinkIcon className="h-4 w-4" />
-                Переглянути заявки
+              <h3 className="font-medium mb-2">Наповнити базу (Seed)</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Запускає скрипт seed.py для імпорту 200 манг та 1000 користувачів. Це може зайняти кілька хвилин.
+              </p>
+              <Button 
+                onClick={() => handleAdminAction('seed', 'POST', setIsSeeding)} 
+                disabled={isSeeding || isDeleting}
+                className="w-full gap-2 bg-[#59631f] hover:bg-[#59631f]/90"
+              >
+                {isSeeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                Запустити Seeding
+              </Button>
+            </div>
+
+            <div className="p-4 bg-destructive/5 rounded-lg border border-destructive/20">
+              <h3 className="font-medium mb-2 text-destructive">Видалити все</h3>
+              <p className="text-sm text-muted-foreground mb-4 text-destructive/70">
+                Очищує всі таблиці (манга, розділи, коментарі тощо), крім адмінів. Дія незворотна!
+              </p>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  if (window.confirm('Ви впевнені, що хочете видалити ВСІ дані (крім адмінів)?')) {
+                    handleAdminAction('seed', 'DELETE', setIsDeleting);
+                  }
+                }}
+                disabled={isSeeding || isDeleting}
+                className="w-full gap-2 border-destructive text-destructive hover:bg-destructive hover:text-white"
+              >
+                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Очистити базу
               </Button>
             </div>
           </div>
