@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Users, BookOpen, Image, AlertTriangle, AlertCircle, PieChart, List, TrendingUp, TrendingDown, Shield, FileWarning, Link as LinkIcon, Database, Play, Trash2, Loader2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { AdminLayout } from '../components/AdminLayout';
@@ -17,6 +17,28 @@ interface TeamRanking {
   chaptersPublished: number;
   totalViews: number;
   badge?: 'gold' | 'silver' | 'bronze';
+}
+
+interface PlatformStats {
+  totalUsers: number;
+  totalTeams: number;
+  totalManga: number;
+  totalChapters: number;
+  totalPages: number;
+  newUsersThisWeek: number;
+  newMangaThisMonth: number;
+  usersGrowthPercent: number;
+  mangaGrowthPercent: number;
+}
+
+interface GenreStat {
+  name: string;
+  value: number;
+}
+
+interface RegistrationStat {
+  month: string;
+  count: number;
 }
 
 const genreData: GenreData[] = [
@@ -57,9 +79,46 @@ export function AdminDashboardPage() {
   const [isSeeding, setIsSeeding] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
+  const [genreStats, setGenreStats] = useState<GenreStat[]>([]);
+  const [registrationStats, setRegistrationStats] = useState<RegistrationStat[]>([]);
+  const [teamRankings, setTeamRankings] = useState<TeamRanking[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const env = (import.meta as any).env;
   const apiUrl = env?.VITE_API_URL || 'http://localhost:8080/api';
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      const token = localStorage.getItem('token');
+      try {
+        const [statsRes, genreRes, regRes, teamRes] = await Promise.all([
+          fetch(`${apiUrl}/admin/stats`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${apiUrl}/admin/genre-stats`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${apiUrl}/admin/registration-stats`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${apiUrl}/admin/team-stats`, { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+
+        if (statsRes.ok) setPlatformStats(await statsRes.json());
+        if (genreRes.ok) setGenreStats(await genreRes.json());
+        if (regRes.ok) setRegistrationStats(await regRes.json());
+        if (teamRes.ok) setTeamRankings(await teamRes.json());
+      } catch (err) {
+        console.error('Failed to load dashboard data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [apiUrl]);
+
+  const genreColors = ['#59631f', '#aeba68', '#8b9456', '#6b7542', '#4a5230', '#a3b060', '#c5d078'];
+  const displayGenreData = genreStats.length > 0
+    ? genreStats.map((g, i) => ({ ...g, color: genreColors[i % genreColors.length] }))
+    : genreData;
+  const displayRegistrationData = registrationStats.length > 0 ? registrationStats : registrationData;
+  const displayTeams = teamRankings.length > 0 ? teamRankings : topTeams;
 
   const handleAdminAction = async (endpoint: string, method: string, setLoader: (v: boolean) => void) => {
     setLoader(true);
@@ -88,7 +147,29 @@ export function AdminDashboardPage() {
     }
   };
 
-  const totalGenreViews = genreData.reduce((sum, genre) => sum + genre.value, 0);
+  const totalGenreViews = displayGenreData.reduce((sum, genre) => sum + genre.value, 0);
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="container mx-auto px-6 py-8 max-w-7xl">
+          <div className="mb-8">
+            <h1 className="text-3xl font-semibold mb-2">Аналітичний дашборд</h1>
+            <div className="h-px bg-gradient-to-r from-primary/50 via-primary/20 to-transparent mt-4" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-card border border-border rounded-lg p-6 animate-pulse">
+                <div className="h-10 w-10 bg-secondary rounded-lg mb-4" />
+                <div className="h-8 w-24 bg-secondary rounded mb-2" />
+                <div className="h-4 w-32 bg-secondary rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
@@ -110,12 +191,12 @@ export function AdminDashboardPage() {
               </div>
               <div className="flex items-center gap-1 text-xs font-medium text-green-400 bg-green-400/10 px-2 py-1 rounded">
                 <TrendingUp className="h-3 w-3" />
-                +12.3%
+                {platformStats?.usersGrowthPercent ? `+${platformStats.usersGrowthPercent}%` : '+0%'}
               </div>
             </div>
-            <div className="text-3xl font-bold mb-1">12,458</div>
+            <div className="text-3xl font-bold mb-1">{platformStats?.totalUsers?.toLocaleString() || '-'}</div>
             <div className="text-sm text-muted-foreground">Усього користувачів</div>
-            <p className="text-xs text-primary mt-2">+1,234 цього тижня</p>
+            <p className="text-xs text-primary mt-2">+{platformStats?.newUsersThisWeek?.toLocaleString() || 0} цього тижня</p>
           </div>
 
           {/* Active Teams */}
@@ -123,7 +204,7 @@ export function AdminDashboardPage() {
             <div className="p-3 rounded-lg bg-purple-500/20 inline-block mb-4">
               <Shield className="h-6 w-6 text-purple-400" />
             </div>
-            <div className="text-3xl font-bold mb-1">147</div>
+            <div className="text-3xl font-bold mb-1">{platformStats?.totalTeams?.toLocaleString() || '-'}</div>
             <div className="text-sm text-muted-foreground">Активні команди</div>
             <p className="text-xs text-muted-foreground mt-2">Затверджені перекладацькі команди</p>
           </div>
@@ -136,12 +217,14 @@ export function AdminDashboardPage() {
             </div>
             <div className="flex items-center gap-1 text-xs font-medium text-red-400 bg-red-400/10 px-2 py-1 rounded">
                 <TrendingDown className="h-3 w-3" />
-                -1.4%
+                {platformStats?.mangaGrowthPercent !== undefined && platformStats.mangaGrowthPercent !== 0
+                  ? `${platformStats.mangaGrowthPercent > 0 ? '+' : ''}${platformStats.mangaGrowthPercent}%`
+                  : '+0%'}
               </div>
             </div>
-            <div className="text-3xl font-bold mb-1">1,847</div>
+            <div className="text-3xl font-bold mb-1">{platformStats?.totalManga?.toLocaleString() || '-'}</div>
             <div className="text-sm text-muted-foreground">Бібліотека манг</div>
-            <p className="text-xs text-primary mt-2">+23 нові цього місяця</p>
+            <p className="text-xs text-primary mt-2">+{platformStats?.newMangaThisMonth?.toLocaleString() || 0} нові цього місяця</p>
           </div>
 
           {/* Total Pages */}
@@ -149,7 +232,14 @@ export function AdminDashboardPage() {
             <div className="p-3 rounded-lg bg-blue-500/20 inline-block mb-4">
               <Image className="h-6 w-6 text-blue-400" />
             </div>
-            <div className="text-3xl font-bold mb-1">2.4M</div>
+            <div className="text-3xl font-bold mb-1">
+              {platformStats ? (platformStats.totalPages >= 1000000
+                ? (platformStats.totalPages / 1000000).toFixed(1) + 'M'
+                : platformStats.totalPages >= 1000
+                  ? (platformStats.totalPages / 1000).toFixed(1) + 'K'
+                  : platformStats.totalPages.toLocaleString())
+                : '-'}
+            </div>
             <div className="text-sm text-muted-foreground">Завантажені сторінки</div>
             <p className="text-xs text-muted-foreground mt-2">Загальна кількість зображень в БД</p>
           </div>
@@ -191,7 +281,7 @@ export function AdminDashboardPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsPie>
                     <Pie
-                      data={genreData}
+                      data={displayGenreData}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
@@ -274,7 +364,7 @@ export function AdminDashboardPage() {
             </div>
 
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={registrationData}>
+              <BarChart data={displayRegistrationData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                 <XAxis dataKey="month" stroke="#888" style={{ fontSize: '12px' }} />
                 <YAxis stroke="#888" style={{ fontSize: '12px' }} />
@@ -327,7 +417,7 @@ export function AdminDashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {topTeams.map((team) => (
+                {displayTeams.map((team) => (
                   <tr key={team.rank} className="hover:bg-secondary/20 transition-colors">
                     <td className="px-6 py-4 text-center">
                       {team.badge ? (
