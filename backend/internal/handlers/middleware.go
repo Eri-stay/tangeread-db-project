@@ -69,3 +69,52 @@ func JWTMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// OptionalJWTMiddleware attempts to validate token but does not abort if it's missing
+func OptionalJWTMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.Next()
+			return
+		}
+
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			c.Next()
+			return
+		}
+
+		tokenString := parts[1]
+		secret := os.Getenv("JWT_SECRET")
+		if secret == "" {
+			secret = "fallback_secret_key"
+		}
+
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			}
+			return []byte(secret), nil
+		})
+
+		if err != nil || !token.Valid {
+			c.Next()
+			return
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			c.Next()
+			return
+		}
+
+		userIDFloat, ok := claims["user_id"].(float64)
+		if ok {
+			c.Set("user_id", uint(userIDFloat))
+			c.Set("role", claims["role"])
+		}
+
+		c.Next()
+	}
+}

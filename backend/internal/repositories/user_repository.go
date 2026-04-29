@@ -23,6 +23,7 @@ type UserRepository interface {
 	SetFavorite(userID, mangaID uint, isFavorite bool) error
 	SetMangaStatus(userID, mangaID uint, status string) error
 	RateManga(userID, mangaID uint, score int) error
+	GetUserTeamID(userID uint) (uint, error)
 }
 
 type postgresUserRepository struct {
@@ -224,4 +225,13 @@ func (r *postgresUserRepository) RateManga(userID, mangaID uint, score int) erro
 		return err
 	}
 	return r.db.Model(&rating).Update("score", score).Error
+}
+
+func (r *postgresUserRepository) GetUserTeamID(userID uint) (uint, error) {
+	var membership models.TeamMember
+	err := r.db.Where("user_id = ?", userID).First(&membership).Error
+	if err != nil {
+		return 0, err
+	}
+	return membership.TeamID, nil
 }

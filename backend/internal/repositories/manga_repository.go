@@ -15,8 +15,9 @@ type MangaRepository interface {
 	Create(manga *models.Manga, tagIDs []uint) error
 	Update(manga *models.Manga, tagIDs []uint) error
 	CreateChapter(chapter *models.Chapter) error
-	GetSimilarManga(mangaID uint, limit int) ([]models.Manga, error)
+	GetSimilarManga(mangaID uint, limit, offset int) ([]models.Manga, error)
 	GetPersonalizedRecommendations(userID uint, limit int) ([]models.Manga, error)
+	UpdateReadingHistory(userID, mangaID, chapterID uint) error
 }
 
 type postgresMangaRepository struct {
@@ -68,6 +69,8 @@ func (r *postgresMangaRepository) GetChapter(mangaID uint, chapterNum float64) (
 	if err != nil {
 		return nil, err
 	}
+	// Increment view count asynchronously/simply
+	r.db.Model(&chapter).UpdateColumn("view_count", gorm.Expr("view_count + 1"))
 	return &chapter, nil
 }
 
@@ -171,7 +174,7 @@ func (r *postgresMangaRepository) CreateChapter(chapter *models.Chapter) error {
 	return r.db.Create(chapter).Error
 }
 
-func (r *postgresMangaRepository) GetSimilarManga(mangaID uint, limit int) ([]models.Manga, error) {
+func (r *postgresMangaRepository) GetSimilarManga(mangaID uint, limit, offset int) ([]models.Manga, error) {
 	var mangas []models.Manga
 	query := `
 WITH 
@@ -206,9 +209,9 @@ LEFT JOIN user_similarity us ON us.other_id = m.id
 JOIN manga_stats_mv mv ON mv.manga_id = m.id
 WHERE m.display_status = 'active'
 ORDER BY (COALESCE(ts.jaccard_score, 0) * 0.6 + COALESCE(us.co_occurrence_score, 0) * 0.4) DESC
-LIMIT ?;`
+LIMIT ? OFFSET ?;`
 
-	err := r.db.Raw(query, mangaID, mangaID, mangaID, mangaID, mangaID, mangaID, limit).Scan(&mangas).Error
+	err := r.db.Raw(query, mangaID, mangaID, mangaID, mangaID, mangaID, mangaID, limit, offset).Scan(&mangas).Error
 	if err == nil && len(mangas) > 0 {
 		mangaIDs := make([]uint, len(mangas))
 		for i := range mangas {
@@ -276,15 +279,16 @@ user_affinity AS (
                 WHEN r.score IS NOT NULL THEN r.score - 5 -- Оцінка 10 дає +5, оцінка 1 дає -4
                 WHEN ums.status = 'completed' THEN 3
                 WHEN ums.status = 'reading' THEN 2
+                WHEN rh.user_id IS NOT NULL THEN 1
                 ELSE 0 
             END
         ) as affinity_score
     FROM manga_tags mt
     LEFT JOIN ratings r ON r.manga_id = mt.manga_id AND r.user_id = ?
     LEFT JOIN user_manga_statuses ums ON ums.manga_id = mt.manga_id AND ums.user_id = ?
-    WHERE r.user_id IS NOT NULL OR ums.user_id IS NOT NULL
+    LEFT JOIN reading_histories rh ON rh.manga_id = mt.manga_id AND rh.user_id = ?
+    WHERE r.user_id IS NOT NULL OR ums.user_id IS NOT NULL OR rh.user_id IS NOT NULL
     GROUP BY mt.tag_id
-    HAVING SUM(CASE WHEN r.score IS NOT NULL THEN r.score ELSE 0 END) > 0
 ),
 -- 3. Розрахунок персонального балу з Байєсівським згладжуванням
 manga_scoring AS (
@@ -311,7 +315,7 @@ JOIN manga_stats_mv mv ON mv.manga_id = m.id
 ORDER BY (ms.user_match_score * 0.7 + ms.smoothed_rating * 0.3) DESC
 LIMIT ?;`
 
-	err := r.db.Raw(query, userID, userID, userID, limit).Scan(&mangas).Error
+	err := r.db.Raw(query, userID, userID, userID, userID, limit).Scan(&mangas).Error
 	if err == nil && len(mangas) > 0 {
 		mangaIDs := make([]uint, len(mangas))
 		for i := range mangas {
@@ -357,4 +361,14 @@ LIMIT ?;`
 		}
 	}
 	return mangas, err
+}
+
+func (r *postgresMangaRepository) UpdateReadingHistory(userID, mangaID, chapterID uint) error {
+	return r.db.Exec(`
+		INSERT INTO reading_histories (user_id, manga_id, chapter_id, updated_at)
+		VALUES (?, ?, ?, NOW())
+		ON CONFLICT (user_id, manga_id) DO UPDATE SET
+			chapter_id = EXCLUDED.chapter_id,
+			updated_at = NOW()
+	`, userID, mangaID, chapterID).Error
 }

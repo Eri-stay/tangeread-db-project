@@ -19,6 +19,7 @@ type UserService interface {
 	SetFavorite(userID, mangaID uint, isFavorite bool) error
 	SetMangaStatus(userID, mangaID uint, status string) error
 	RateManga(userID, mangaID uint, score int) error
+	GetUserTeamID(userID uint) (uint, error)
 }
 
 type userService struct {
@@ -148,4 +149,8 @@ func (s *userService) SetMangaStatus(userID, mangaID uint, status string) error 
 
 func (s *userService) RateManga(userID, mangaID uint, score int) error {
 	return s.userRepo.RateManga(userID, mangaID, score)
+}
+
+func (s *userService) GetUserTeamID(userID uint) (uint, error) {
+	return s.userRepo.GetUserTeamID(userID)
 }

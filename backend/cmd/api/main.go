@@ -81,7 +81,7 @@ func main() {
 
 	authHandler := handlers.NewAuthHandler(authService)
 	userHandler := handlers.NewUserHandler(userService, mediaStorage)
-	mangaHandler := handlers.NewMangaHandler(mangaService, mediaStorage)
+	mangaHandler := handlers.NewMangaHandler(mangaService, userService, mediaStorage)
 	adminHandler := handlers.NewAdminHandler(database.DB, seedScript)
 
 	// 7. Setup Gin Router
@@ -103,7 +103,9 @@ func main() {
 			auth.POST("/login", authHandler.Login)
 		}
 
+		// Public manga routes (with optional user context)
 		manga := api.Group("/manga")
+		manga.Use(handlers.OptionalJWTMiddleware())
 		{
 			manga.GET("", mangaHandler.GetMangaList)
 			manga.GET("/latest", mangaHandler.GetLatestUpdated)

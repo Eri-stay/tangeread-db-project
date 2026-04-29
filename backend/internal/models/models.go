@@ -161,18 +161,18 @@ type Tag struct {
 }
 
 type Chapter struct {
-	ID            uint `gorm:"primaryKey"`
-	MangaID       uint `gorm:"uniqueIndex:idx_manga_chapter;not null"`
-	Volume        *int
-	ChapterNumber float64 `gorm:"uniqueIndex:idx_manga_chapter;type:decimal(6,2);not null"`
-	Title         *string
-	UploaderID    *uint
-	Uploader      *User
-	DisplayStatus DisplayStatus `gorm:"type:varchar(20);not null;default:'active'"`
-	ViewCount     int64         `gorm:"not null;default:0"`
-	CreatedAt     time.Time
-	PublishedAt   *time.Time
-	PagesURL      *string `gorm:"not null"`
+	ID            uint          `gorm:"primaryKey" json:"id"`
+	MangaID       uint          `gorm:"uniqueIndex:idx_manga_chapter;not null" json:"manga_id"`
+	Volume        *int          `json:"volume"`
+	ChapterNumber float64       `gorm:"uniqueIndex:idx_manga_chapter;type:decimal(6,2);not null" json:"chapter_number"`
+	Title         *string       `json:"title"`
+	UploaderID    *uint         `json:"uploader_id"`
+	Uploader      *User         `json:"uploader"`
+	DisplayStatus DisplayStatus `gorm:"type:varchar(20);not null;default:'active'" json:"display_status"`
+	ViewCount     int64         `gorm:"not null;default:0" json:"view_count"`
+	CreatedAt     time.Time     `json:"created_at"`
+	PublishedAt   *time.Time    `json:"published_at"`
+	PagesURL      *string       `gorm:"not null" json:"pages_url"`
 }
 
 type ReadingHistory struct {

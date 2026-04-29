@@ -20,11 +20,12 @@ import (
 
 type MangaHandler struct {
 	mangaService services.MangaService
+	userService  services.UserService
 	mediaStorage *s3storage.MediaStorage
 }
 
-func NewMangaHandler(mangaService services.MangaService, mediaStorage *s3storage.MediaStorage) *MangaHandler {
-	return &MangaHandler{mangaService: mangaService, mediaStorage: mediaStorage}
+func NewMangaHandler(mangaService services.MangaService, userService services.UserService, mediaStorage *s3storage.MediaStorage) *MangaHandler {
+	return &MangaHandler{mangaService: mangaService, userService: userService, mediaStorage: mediaStorage}
 }
 
 func (h *MangaHandler) GetMangaList(c *gin.Context) {
@@ -131,6 +132,11 @@ func (h *MangaHandler) GetChapter(c *gin.Context) {
 		return
 	}
 
+	// Record reading history if user is logged in
+	if userID, exists := c.Get("user_id"); exists {
+		go h.mangaService.UpdateReadingHistory(userID.(uint), uint(mangaID), chapter.ID)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": chapter})
 }
 
@@ -151,7 +157,7 @@ func (h *MangaHandler) GetAuthorProjects(c *gin.Context) {
 }
 
 func (h *MangaHandler) CreateManga(c *gin.Context) {
-	_, exists := c.Get("user_id")
+	userID, exists := c.Get("user_id")
 	userRole, roleExists := c.Get("role")
 	if !exists || !roleExists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -160,12 +166,12 @@ func (h *MangaHandler) CreateManga(c *gin.Context) {
 
 	var input struct {
 		TitleUa     string `json:"title_ua" binding:"required"`
-		TitleOrig   string `json:"title_orig"`
-		Description string `json:"description"`
-		CoverURL    string `json:"cover_url"`
+		TitleOrig   *string `json:"title_orig"`
+		Description *string `json:"description"`
+		CoverURL    *string `json:"cover_url"`
 		Status      string `json:"status" binding:"required"`
 		Format      string `json:"format" binding:"required"`
-		ReleaseYear int    `json:"release_year"`
+		ReleaseYear *int    `json:"release_year"`
 		TeamID      *uint  `json:"team_id"`
 		TagIDs      []uint `json:"tag_ids"`
 	}
@@ -177,29 +183,27 @@ func (h *MangaHandler) CreateManga(c *gin.Context) {
 
 	manga := &models.Manga{
 		TitleUa:     input.TitleUa,
-		TitleOrig:   &input.TitleOrig,
-		Description: &input.Description,
-		CoverURL:    &input.CoverURL,
+		TitleOrig:   input.TitleOrig,
+		Description: input.Description,
+		CoverURL:    input.CoverURL,
 		Status:      models.MangaStatus(input.Status),
 		Format:      models.MangaFormat(input.Format),
-		ReleaseYear: &input.ReleaseYear,
+		ReleaseYear: input.ReleaseYear,
 	}
 
 	// Role-based logic
 	if userRole == string(models.UserRoleAuthor) {
-		// Authors MUST specify their own team
-		// We'll trust the TeamID from input if they are in it,
-		// OR we can fetch their team automatically.
-		// For simplicity, let's just use the TeamID from input but we SHOULD verify it.
-		// A better way is to fetch the team_id from the DB for this user.
-
-		// Let's assume for now they pass the correct TeamID or we fetch it.
-		// I'll add a simple check.
+		// Authors MUST belong to a team. If TeamID is missing, fetch it automatically.
 		if input.TeamID == nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Team ID is required for authors"})
-			return
+			teamID, err := h.userService.GetUserTeamID(userID.(uint))
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "You must be a member of a team to create manga"})
+				return
+			}
+			manga.TeamID = &teamID
+		} else {
+			manga.TeamID = input.TeamID
 		}
-		manga.TeamID = input.TeamID
 	} else if userRole == string(models.UserRoleAdmin) || userRole == string(models.UserRoleModerator) {
 		manga.TeamID = input.TeamID
 	} else {
@@ -232,12 +236,12 @@ func (h *MangaHandler) UpdateManga(c *gin.Context) {
 
 	var input struct {
 		TitleUa     string `json:"title_ua" binding:"required"`
-		TitleOrig   string `json:"title_orig"`
-		Description string `json:"description"`
-		CoverURL    string `json:"cover_url"`
+		TitleOrig   *string `json:"title_orig"`
+		Description *string `json:"description"`
+		CoverURL    *string `json:"cover_url"`
 		Status      string `json:"status" binding:"required"`
 		Format      string `json:"format" binding:"required"`
-		ReleaseYear int    `json:"release_year"`
+		ReleaseYear *int    `json:"release_year"`
 		TeamID      *uint  `json:"team_id"`
 		TagIDs      []uint `json:"tag_ids"`
 	}
@@ -273,12 +277,12 @@ func (h *MangaHandler) UpdateManga(c *gin.Context) {
 
 	// Update fields
 	existingManga.TitleUa = input.TitleUa
-	existingManga.TitleOrig = &input.TitleOrig
-	existingManga.Description = &input.Description
-	existingManga.CoverURL = &input.CoverURL
+	existingManga.TitleOrig = input.TitleOrig
+	existingManga.Description = input.Description
+	existingManga.CoverURL = input.CoverURL
 	existingManga.Status = models.MangaStatus(input.Status)
 	existingManga.Format = models.MangaFormat(input.Format)
-	existingManga.ReleaseYear = &input.ReleaseYear
+	existingManga.ReleaseYear = input.ReleaseYear
 
 	if input.TeamID != nil {
 		existingManga.TeamID = input.TeamID
@@ -424,6 +428,12 @@ func (h *MangaHandler) UploadChapterPages(c *gin.Context) {
 	bucket := os.Getenv("S3_BUCKET")
 	endpoint := os.Getenv("S3_ENDPOINT")
 
+	chapterID := c.Query("chapter_id")
+	chapterFolder := chapterNum
+	if chapterID != "" {
+		chapterFolder = chapterID
+	}
+
 	for i, file := range files {
 		src, err := file.Open()
 		if err != nil {
@@ -431,7 +441,7 @@ func (h *MangaHandler) UploadChapterPages(c *gin.Context) {
 		}
 
 		ext := filepath.Ext(file.Filename)
-		filename := fmt.Sprintf("mangas/%s/chapters/%s/page_%d%s", mangaID, chapterNum, i+1, ext)
+		filename := fmt.Sprintf("mangas/%s/chapters/%s/page_%d%s", mangaID, chapterFolder, i+1, ext)
 
 		if err := h.mediaStorage.Store(c.Request.Context(), filename, src); err != nil {
 			src.Close()
@@ -490,8 +500,9 @@ func (h *MangaHandler) GetSimilarManga(c *gin.Context) {
 	if limit <= 0 {
 		limit = 12
 	}
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	mangas, err := h.mangaService.GetSimilarManga(uint(id), limit)
+	mangas, err := h.mangaService.GetSimilarManga(uint(id), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch similar manga"})
 		return

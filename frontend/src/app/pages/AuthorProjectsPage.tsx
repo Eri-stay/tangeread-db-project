@@ -6,12 +6,12 @@ import { AuthorLayout } from '../components/AuthorLayout';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
 interface Project {
-  ID: number;
-  TitleUa: string;
-  CoverURL: string;
-  Status: string;
+  id: number;
+  title_ua: string;
+  cover_url: string;
+  status: string;
   chapters_count: number;
-  UpdatedAt: string;
+  updated_at: string;
 }
 
 const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
@@ -101,26 +101,26 @@ export function AuthorProjectsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map((project) => (
               <div 
-                key={project.ID}
+                key={project.id}
                 className="bg-card border border-border rounded-lg overflow-hidden flex flex-col group hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 transition-all"
               >
                 {/* Image & Overlay */}
                 <div className="relative aspect-[3/4] overflow-hidden bg-secondary">
                   <ImageWithFallback 
-                    src={project.CoverURL} 
-                    alt={project.TitleUa}
+                    src={project.cover_url} 
+                    alt={project.title_ua}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-4">
                     <div className="flex gap-2">
                       <Button asChild size="sm" variant="secondary" className="flex-1 gap-2">
-                        <Link to={`/manga/${project.ID}`}>
+                        <Link to={`/manga/${project.id}`}>
                           <Eye className="h-4 w-4" />
                           Перегляд
                         </Link>
                       </Button>
                       <Button asChild size="sm" variant="secondary" className="flex-1 gap-2">
-                        <Link to={`/author/manga/${project.ID}/edit`}>
+                        <Link to={`/author/manga/${project.id}/edit`}>
                           <Edit className="h-4 w-4" />
                           Редагувати
                         </Link>
@@ -130,7 +130,7 @@ export function AuthorProjectsPage() {
                   {/* Status Badge */}
                   <div className="absolute top-3 left-3">
                     <span className="px-2 py-1 bg-black/60 backdrop-blur-md text-white text-[10px] uppercase tracking-wider font-bold rounded border border-white/20">
-                      {project.Status}
+                      {project.status}
                     </span>
                   </div>
                 </div>
@@ -138,7 +138,7 @@ export function AuthorProjectsPage() {
                 {/* Content */}
                 <div className="p-4 flex-1 flex flex-col">
                   <h3 className="font-semibold text-lg mb-2 line-clamp-1 group-hover:text-primary transition-colors">
-                    {project.TitleUa}
+                    {project.title_ua}
                   </h3>
                   
                   <div className="grid grid-cols-2 gap-4 mb-4 mt-auto">
@@ -149,14 +149,14 @@ export function AuthorProjectsPage() {
                     <div>
                       <p className="text-[10px] uppercase text-muted-foreground font-bold tracking-wider mb-1">Оновлено</p>
                       <p className="font-semibold text-sm truncate">
-                        {project.UpdatedAt ? new Date(project.UpdatedAt).toLocaleDateString('uk-UA') : 'Невідомо'}
+                        {project.updated_at ? new Date(project.updated_at).toLocaleDateString('uk-UA') : 'Невідомо'}
                       </p>
                     </div>
                   </div>
 
                   <div className="pt-4 border-t border-border flex gap-2">
                     <Button asChild className="flex-1 bg-[#59631f] hover:bg-[#59631f]/90 gap-2">
-                      <Link to={`/author/manga/${project.ID}/chapter/new`}>
+                      <Link to={`/author/manga/${project.id}/chapter/new`}>
                         <Upload className="h-4 w-4" />
                         Новий розділ
                       </Link>

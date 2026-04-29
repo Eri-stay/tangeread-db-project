@@ -16,7 +16,8 @@ type MangaService interface {
 	UpdateManga(manga *models.Manga, tagIDs []uint) error
 	CreateChapter(chapter *models.Chapter) error
 	GetRecommendations(userID uint, limit int) ([]models.Manga, error)
-	GetSimilarManga(mangaID uint, limit int) ([]models.Manga, error)
+	GetSimilarManga(mangaID uint, limit, offset int) ([]models.Manga, error)
+	UpdateReadingHistory(userID, mangaID, chapterID uint) error
 }
 
 type mangaService struct {
@@ -67,6 +68,10 @@ func (s *mangaService) GetRecommendations(userID uint, limit int) ([]models.Mang
 	return s.mangaRepo.GetPersonalizedRecommendations(userID, limit)
 }
 
-func (s *mangaService) GetSimilarManga(mangaID uint, limit int) ([]models.Manga, error) {
-	return s.mangaRepo.GetSimilarManga(mangaID, limit)
+func (s *mangaService) GetSimilarManga(mangaID uint, limit, offset int) ([]models.Manga, error) {
+	return s.mangaRepo.GetSimilarManga(mangaID, limit, offset)
+}
+
+func (s *mangaService) UpdateReadingHistory(userID, mangaID, chapterID uint) error {
+	return s.mangaRepo.UpdateReadingHistory(userID, mangaID, chapterID)
 }

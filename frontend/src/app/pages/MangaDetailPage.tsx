@@ -29,6 +29,9 @@ export function MangaDetailPage() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [lastReadChapter, setLastReadChapter] = useState<number | null>(null);
   const [user, setUser] = useState<{username: string, role: string} | null>(null);
+  const [similarOffset, setSimilarOffset] = useState(10);
+  const [hasMoreSimilar, setHasMoreSimilar] = useState(true);
+  const [isFetchingSimilar, setIsFetchingSimilar] = useState(false);
   const similarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -120,6 +123,9 @@ export function MangaDetailPage() {
             setLastReadChapter(statusJson.last_chapter || null);
           }
         }
+        // Reset pagination state for new manga
+        setSimilarOffset(10);
+        setHasMoreSimilar(true);
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -129,6 +135,43 @@ export function MangaDetailPage() {
 
     if (id) loadData();
   }, [id]);
+
+  const loadMoreSimilar = async () => {
+    if (isFetchingSimilar || !hasMoreSimilar || !id) return;
+    setIsFetchingSimilar(true);
+    try {
+      const res = await fetch(`${apiUrl}/manga/${id}/similar?limit=10&offset=${similarOffset}`);
+      if (res.ok) {
+        const json = await res.json();
+        const data = json.data || [];
+        if (data.length < 10) setHasMoreSimilar(false);
+        
+        const mapped = data.map((m: any) => ({
+          id: String(m.id),
+          title: m.title_ua || m.title_orig || 'Невідома назва',
+          coverImage: m.cover_url || '',
+          author: m.team?.name || 'Невідомо',
+          rating: m.avg_rating || 0,
+          chapters: m.chapters_count || 0,
+          genres: m.tags?.slice(0, 3).map((t: any) => t.name_uk || t.name_en) || [],
+        }));
+        
+        setSimilarManga(prev => [...prev, ...mapped]);
+        setSimilarOffset(prev => prev + 10);
+      }
+    } catch (e) {
+    } finally {
+      setIsFetchingSimilar(false);
+    }
+  };
+
+  const handleSimilarScroll = () => {
+    if (!similarRef.current) return;
+    const { scrollLeft, scrollWidth, clientWidth } = similarRef.current;
+    if (scrollLeft + clientWidth >= scrollWidth - 100) {
+      loadMoreSimilar();
+    }
+  };
   
   const bookmarkOptions = [
     { value: 'reading', label: 'Читаю', icon: BookOpen },
@@ -140,7 +183,9 @@ export function MangaDetailPage() {
   ];
 
   const chaptersPerPage = 20;
-  const sortedChapters = sortOrder === 'desc' ? [...chapters].sort((a, b) => b.number - a.number) : [...chapters].sort((a, b) => a.number - b.number);
+  const sortedChapters = sortOrder === 'desc' 
+    ? [...chapters].sort((a, b) => (b.chapter_number || 0) - (a.chapter_number || 0)) 
+    : [...chapters].sort((a, b) => (a.chapter_number || 0) - (b.chapter_number || 0));
   const totalPages = Math.ceil(sortedChapters.length / chaptersPerPage);
   const currentChapters = sortedChapters.slice(
     currentPage * chaptersPerPage,
@@ -459,21 +504,21 @@ export function MangaDetailPage() {
           <div className="space-y-2">
             {currentChapters.map((chapter) => (
               <Link
-                key={chapter.ID}
-                to={`/read/${manga.id}/${chapter.ChapterNumber}`}
+                key={chapter.id}
+                to={`/read/${manga.id}/${chapter.chapter_number}`}
                 className="flex items-center justify-between p-3 rounded hover:bg-secondary transition-colors border border-transparent hover:border-primary/30 group"
               >
                 <div className="flex items-center gap-3">
                   <span className="font-medium group-hover:text-primary transition-colors">
-                    Том {chapter.VolumeNumber} Розділ {chapter.ChapterNumber} {chapter.Title ? `- ${chapter.Title}` : ''}
+                    {chapter.volume ? `Том ${chapter.volume} ` : ''}Розділ {chapter.chapter_number} {chapter.title ? `- ${chapter.title}` : ''}
                   </span>
                   <span className="text-sm text-muted-foreground">
-                    {chapter.CreatedAt ? new Date(chapter.CreatedAt).toLocaleDateString('uk-UA') : 'Невідомо'}
+                    {chapter.created_at ? new Date(chapter.created_at).toLocaleDateString('uk-UA') : 'Невідомо'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Eye className="h-4 w-4" />
-                  <span>{(chapter.Views || 0).toLocaleString()}</span>
+                  <span>{(chapter.view_count || 0).toLocaleString()}</span>
                 </div>
               </Link>
             ))}
@@ -536,13 +581,21 @@ export function MangaDetailPage() {
           </div>
           <div 
             ref={similarRef}
+            onScroll={handleSimilarScroll}
             className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth pb-4"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             {similarManga.length > 0 ? (
-              similarManga.map((m) => (
-                <MangaCard key={m.id} manga={m} />
-              ))
+              <>
+                {similarManga.map((m) => (
+                  <MangaCard key={m.id} manga={m} />
+                ))}
+                {isFetchingSimilar && (
+                  <div className="flex items-center justify-center min-w-[200px]">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  </div>
+                )}
+              </>
             ) : (
               trending.filter(m => m.id !== manga.id).slice(0, 8).map((m) => (
                 <MangaCard key={m.id} manga={m} />
