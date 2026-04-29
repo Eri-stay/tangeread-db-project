@@ -12,6 +12,7 @@ import (
 
 	"github.com/eri-stay/tangeread-db-project/backend/internal/database"
 	"github.com/eri-stay/tangeread-db-project/backend/internal/models"
+	"github.com/eri-stay/tangeread-db-project/backend/internal/repositories"
 	"github.com/eri-stay/tangeread-db-project/backend/internal/services"
 	s3storage "github.com/eri-stay/tangeread-db-project/backend/internal/storage/s3"
 	"github.com/gin-gonic/gin"
@@ -38,7 +39,29 @@ func (h *MangaHandler) GetMangaList(c *gin.Context) {
 	offsetStr := c.DefaultQuery("offset", "0")
 	offset, _ := strconv.Atoi(offsetStr)
 
-	mangas, err := h.mangaService.GetMangaList(limit, offset)
+	// Filter params
+	filters := repositories.MangaFilters{
+		Query:  c.Query("q"),
+		Sort:   c.Query("sort"),
+		Status: c.QueryArray("status"),
+		Format: c.QueryArray("format"),
+	}
+
+	tagIDsStr := c.QueryArray("tags")
+	for _, idStr := range tagIDsStr {
+		if id, err := strconv.ParseUint(idStr, 10, 32); err == nil {
+			filters.Tags = append(filters.Tags, uint(id))
+		}
+	}
+
+	excludeIDsStr := c.QueryArray("exclude")
+	for _, idStr := range excludeIDsStr {
+		if id, err := strconv.ParseUint(idStr, 10, 32); err == nil {
+			filters.Exclude = append(filters.Exclude, uint(id))
+		}
+	}
+
+	mangas, err := h.mangaService.GetFiltered(filters, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch manga list"})
 		return

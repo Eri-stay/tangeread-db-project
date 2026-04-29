@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { Search, Edit, EyeOff, Eye, MessageSquare } from 'lucide-react';
-import { Link } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Search, EyeOff, Eye, MessageSquare, Loader2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
 import { AdminLayout } from '../components/AdminLayout';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -96,92 +96,129 @@ const mockComments: Comment[] = [
     timestamp: '3 дні тому',
   },
 ];
+const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
 
 export function ContentModerationPage() {
-  const [mangaList, setMangaList] = useState<Manga[]>(mockManga);
-  const [comments, setComments] = useState<Comment[]>(mockComments);
+  const [mangaList, setMangaList] = useState<any[]>([]);
+  const [comments, setComments] = useState<any[]>([]);
   const [mangaSearch, setMangaSearch] = useState('');
-  const [editMangaModalOpen, setEditMangaModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [hideMangaModalOpen, setHideMangaModalOpen] = useState(false);
-  const [editCommentModalOpen, setEditCommentModalOpen] = useState(false);
-  const [selectedManga, setSelectedManga] = useState<Manga | null>(null);
-  const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
-  const [hideReason, setHideReason] = useState('');
-  const [editedContent, setEditedContent] = useState('');
+  const [selectedManga, setSelectedManga] = useState<any | null>(null);
+  const navigate = useNavigate();
 
-  const filteredManga = mangaList.filter((manga) =>
-    manga.title.toLowerCase().includes(mangaSearch.toLowerCase()) ||
-    manga.author.toLowerCase().includes(mangaSearch.toLowerCase())
-  );
+  const userStr = localStorage.getItem('user');
+  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const token = localStorage.getItem('token');
 
-  const handleHideManga = (manga: Manga) => {
-    setSelectedManga(manga);
-    setHideReason('');
-    setHideMangaModalOpen(true);
+  // Role check: Only moderators and admins allowed
+  useEffect(() => {
+    if (!currentUser || (currentUser.role !== 'moderator' && currentUser.role !== 'admin')) {
+      navigate('/');
+    } else {
+      fetchManga();
+      fetchComments();
+    }
+  }, [currentUser, navigate]);
+
+  const fetchManga = async () => {
+    try {
+      const response = await fetch(`${apiUrl}/moderation/manga`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const json = await response.json();
+        setMangaList(json.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch manga:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const confirmHideManga = (reason: string, customNote: string) => {
+  const fetchComments = async () => {
+    try {
+      const response = await fetch(`${apiUrl}/moderation/comments`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const json = await response.json();
+        setComments(json.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch comments:', err);
+    }
+  };
+
+  const filteredManga = mangaList.filter((manga) =>
+    manga.title_ua.toLowerCase().includes(mangaSearch.toLowerCase()) ||
+    manga.title_orig?.toLowerCase().includes(mangaSearch.toLowerCase())
+  );
+
+  const handleToggleMangaVisibility = async (mangaId: number) => {
+    const manga = mangaList.find(m => m.id === mangaId);
+    if (!manga) return;
+
+    if (manga.display_status === 'active') {
+      // Show modal for hiding
+      setSelectedManga(manga);
+      setHideMangaModalOpen(true);
+    } else {
+      // Just toggle for showing back
+      await executeMangaToggle(mangaId);
+    }
+  };
+
+  const executeMangaToggle = async (mangaId: number, reason?: string) => {
+    try {
+      const response = await fetch(`${apiUrl}/moderation/manga/${mangaId}/toggle`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: reason ? JSON.stringify({ reason }) : undefined
+      });
+      if (response.ok) {
+        fetchManga();
+      }
+    } catch (err) {
+      console.error('Failed to toggle manga visibility:', err);
+    }
+  };
+
+  const confirmHideManga = async (reason: string, customNote: string) => {
     if (selectedManga) {
-      const fullReason = customNote ? `${reason} - ${customNote}` : reason;
-      setMangaList((prev) =>
-        prev.map((manga) =>
-          manga.id === selectedManga.id
-            ? { ...manga, isHidden: true, hiddenReason: fullReason }
-            : manga
-        )
-      );
+      const fullReason = customNote ? `${reason}: ${customNote}` : reason;
+      await executeMangaToggle(selectedManga.id, fullReason);
       setHideMangaModalOpen(false);
     }
   };
 
-  const handleShowManga = (mangaId: string) => {
-    setMangaList((prev) =>
-      prev.map((manga) =>
-        manga.id === mangaId
-          ? { ...manga, isHidden: false, hiddenReason: undefined }
-          : manga
-      )
-    );
-  };
-
-  const handleEditComment = (comment: Comment) => {
-    setSelectedComment(comment);
-    setEditedContent(comment.content);
-    setEditCommentModalOpen(true);
-  };
-
-  const confirmEditComment = () => {
-    if (selectedComment && editedContent.trim()) {
-      setComments((prev) =>
-        prev.map((comment) =>
-          comment.id === selectedComment.id
-            ? { ...comment, content: editedContent }
-            : comment
-        )
-      );
+  const handleToggleCommentVisibility = async (commentId: number) => {
+    try {
+      const response = await fetch(`${apiUrl}/moderation/comments/${commentId}/toggle`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        fetchComments();
+      }
+    } catch (err) {
+      console.error('Failed to toggle comment visibility:', err);
     }
-    setEditCommentModalOpen(false);
   };
 
-  const handleHideComment = (commentId: string) => {
-    setComments((prev) =>
-      prev.map((comment) =>
-        comment.id === commentId
-          ? { ...comment, isHidden: true, content: 'Приховано модератором' }
-          : comment
-      )
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-[60vh]">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </AdminLayout>
     );
-  };
-
-  const handleShowComment = (commentId: string, originalContent: string) => {
-    setComments((prev) =>
-      prev.map((comment) =>
-        comment.id === commentId
-          ? { ...comment, isHidden: false }
-          : comment
-      )
-    );
-  };
+  }
 
   return (
     <AdminLayout>
@@ -219,7 +256,7 @@ export function ContentModerationPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Пошук манги за назвою або автором"
+                  placeholder="Пошук манги за назвою..."
                   value={mangaSearch}
                   onChange={(e) => setMangaSearch(e.target.value)}
                   className="pl-10 bg-secondary border-border h-11"
@@ -234,7 +271,7 @@ export function ContentModerationPage() {
                   <thead className="border-b border-border bg-secondary/20">
                     <tr>
                       <th className="text-left px-6 py-4 text-sm font-semibold">Манга</th>
-                      <th className="text-left px-6 py-4 text-sm font-semibold">Автор</th>
+                      <th className="text-left px-6 py-4 text-sm font-semibold">Команда</th>
                       <th className="text-left px-6 py-4 text-sm font-semibold">Статус</th>
                       <th className="text-center px-6 py-4 text-sm font-semibold">Дії</th>
                     </tr>
@@ -243,83 +280,57 @@ export function ContentModerationPage() {
                     {filteredManga.map((manga) => (
                       <tr
                         key={manga.id}
-                        className={`hover:bg-secondary/20 transition-colors ${
-                          manga.isHidden ? 'opacity-60' : ''
-                        }`}
+                        className={`hover:bg-secondary/20 transition-colors ${manga.display_status === 'hidden_by_mod' ? 'opacity-60 bg-destructive/5' : ''
+                          }`}
                       >
-                        {/* Manga with Cover */}
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <div className="w-12 h-16 rounded overflow-hidden bg-secondary">
                               <ImageWithFallback
-                                src={manga.cover}
-                                alt={manga.title}
+                                src={manga.cover_url}
+                                alt={manga.title_ua}
                                 className="w-full h-full object-cover"
                               />
                             </div>
                             <div>
-                              <p className="font-medium">{manga.title}</p>
-                              {manga.isHidden && manga.hiddenReason && (
-                                <p className="text-xs text-destructive mt-1">
-                                  Приховано: {manga.hiddenReason}
-                                </p>
-                              )}
+                              <p className="font-medium">{manga.title_ua}</p>
+                              <p className="text-xs text-muted-foreground">{manga.title_orig}</p>
                             </div>
                           </div>
                         </td>
 
-                        {/* Author */}
-                        <td className="px-6 py-4 text-muted-foreground">{manga.author}</td>
+                        <td className="px-6 py-4 text-muted-foreground">
+                          {manga.team?.name || 'Без команди'}
+                        </td>
 
-                        {/* Status */}
                         <td className="px-6 py-4">
                           <span
-                            className={`px-3 py-1 rounded-full text-sm font-medium ${
-                              manga.isHidden
+                            className={`px-3 py-1 rounded-full text-sm font-medium ${manga.display_status === 'hidden_by_mod'
                                 ? 'bg-destructive/20 text-destructive'
                                 : 'bg-primary/20 text-primary'
-                            }`}
+                              }`}
                           >
-                            {manga.isHidden ? 'Прихований' : manga.status}
+                            {manga.display_status === 'hidden_by_mod' ? 'Приховано' : 'Активно'}
                           </span>
                         </td>
 
-                        {/* Actions */}
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-center gap-2">
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => {
-                                setSelectedManga(manga);
-                                setEditMangaModalOpen(true);
-                              }}
-                              className="gap-1"
+                              onClick={() => handleToggleMangaVisibility(manga.id)}
+                              className={`gap-1 ${manga.display_status === 'hidden_by_mod'
+                                  ? 'text-green-500 border-green-500/30'
+                                  : 'text-destructive border-destructive/30'
+                                }`}
                             >
-                              <Edit className="h-3 w-3" />
-                              Редагувати
+                              {manga.display_status === 'hidden_by_mod' ? (
+                                <><Eye className="h-3 w-3" /> Показати</>
+                              ) : (
+                                <><EyeOff className="h-3 w-3" /> Приховати</>
+                              )}
                             </Button>
-                            {manga.isHidden ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleShowManga(manga.id)}
-                                className="gap-1 text-green-500 hover:text-green-500 border-green-500/30"
-                              >
-                                <Eye className="h-3 w-3" />
-                                Показати
-                              </Button>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleHideManga(manga)}
-                                className="gap-1 text-destructive hover:text-destructive border-destructive/30"
-                              >
-                                <EyeOff className="h-3 w-3" />
-                                Приховати
-                              </Button>
-                            )}
                           </div>
                         </td>
                       </tr>
@@ -342,39 +353,41 @@ export function ContentModerationPage() {
                 {comments.map((comment) => (
                   <div
                     key={comment.id}
-                    className={`p-4 rounded-lg border transition-colors ${
-                      comment.isHidden
+                    className={`p-4 rounded-lg border transition-colors ${comment.display_status === 'hidden_by_mod'
                         ? 'bg-destructive/5 border-destructive/30'
                         : 'bg-secondary/30 border-border hover:border-primary/30'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start gap-3 mb-3">
                       <div className="w-10 h-10 rounded-full overflow-hidden bg-secondary border-2 border-border flex-shrink-0">
                         <ImageWithFallback
-                          src={comment.authorAvatar}
-                          alt={comment.author}
+                          src={comment.user?.avatar_url}
+                          alt={comment.user?.username}
                           className="w-full h-full object-cover"
                         />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium">{comment.author}</span>
+                          <span className="font-medium">{comment.user?.username}</span>
                           <span className="text-xs text-muted-foreground">•</span>
-                          <span className="text-xs text-muted-foreground">{comment.timestamp}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(comment.created_at).toLocaleString('uk-UA')}
+                          </span>
                         </div>
-                        <Link
-                          to={`/read/${comment.mangaId}/${comment.chapterNumber}`}
-                          className="text-sm text-primary hover:underline"
-                        >
-                          {comment.mangaTitle} - Розділ {comment.chapterNumber}
-                        </Link>
+                        {comment.chapter?.manga && (
+                          <Link
+                            to={`/read/${comment.chapter.manga_id}/${comment.chapter.chapter_number}`}
+                            className="text-sm text-primary hover:underline"
+                          >
+                            {comment.chapter.manga.title_ua} - Розділ {comment.chapter.chapter_number}
+                          </Link>
+                        )}
                       </div>
                     </div>
 
                     <p
-                      className={`mb-3 ${
-                        comment.isHidden ? 'text-destructive italic' : 'text-foreground'
-                      }`}
+                      className={`mb-3 ${comment.display_status === 'hidden_by_mod' ? 'text-destructive italic' : 'text-foreground'
+                        }`}
                     >
                       {comment.content}
                     </p>
@@ -383,34 +396,18 @@ export function ContentModerationPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleEditComment(comment)}
-                        disabled={comment.isHidden}
-                        className="gap-1"
+                        onClick={() => handleToggleCommentVisibility(comment.id)}
+                        className={`gap-1 ${comment.display_status === 'hidden_by_mod'
+                            ? 'text-green-500 border-green-500/30'
+                            : 'text-destructive border-destructive/30'
+                          }`}
                       >
-                        <Edit className="h-3 w-3" />
-                        Редагувати
+                        {comment.display_status === 'hidden_by_mod' ? (
+                          <><Eye className="h-3 w-3" /> Показати</>
+                        ) : (
+                          <><EyeOff className="h-3 w-3" /> Приховати</>
+                        )}
                       </Button>
-                      {comment.isHidden ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleShowComment(comment.id, comment.content)}
-                          className="gap-1 text-green-500 hover:text-green-500 border-green-500/30"
-                        >
-                          <Eye className="h-3 w-3" />
-                          Показати
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleHideComment(comment.id)}
-                          className="gap-1 text-destructive hover:text-destructive border-destructive/30"
-                        >
-                          <EyeOff className="h-3 w-3" />
-                          Приховати
-                        </Button>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -420,28 +417,6 @@ export function ContentModerationPage() {
         </Tabs>
       </div>
 
-      {/* Edit Manga Modal */}
-      <Dialog open={editMangaModalOpen} onOpenChange={setEditMangaModalOpen}>
-        <DialogContent className="bg-card border-border max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Редагування манги</DialogTitle>
-            <DialogDescription>
-              Редагування метаданих для: {selectedManga?.title}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              Функція редагування метаданих буде реалізована в майбутніх версіях.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditMangaModalOpen(false)}>
-              Закрити
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Hide Manga Modal */}
       <HideReasonModal
         open={hideMangaModalOpen}
@@ -450,41 +425,6 @@ export function ContentModerationPage() {
         contentTitle={selectedManga?.title || ''}
         onConfirm={confirmHideManga}
       />
-
-      {/* Edit Comment Modal */}
-      <Dialog open={editCommentModalOpen} onOpenChange={setEditCommentModalOpen}>
-        <DialogContent className="bg-card border-border">
-          <DialogHeader>
-            <DialogTitle>Редагування коментаря</DialogTitle>
-            <DialogDescription>
-              Санітарна обробка неприйнятного тексту
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-content">Вміст коментаря</Label>
-              <Textarea
-                id="edit-content"
-                value={editedContent}
-                onChange={(e) => setEditedContent(e.target.value)}
-                className="bg-secondary border-border min-h-24"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditCommentModalOpen(false)}>
-              Скасувати
-            </Button>
-            <Button
-              onClick={confirmEditComment}
-              disabled={!editedContent.trim()}
-              className="bg-primary hover:bg-primary/90"
-            >
-              Зберегти зміни
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </AdminLayout>
   );
 }

@@ -5,22 +5,17 @@
 
 -- Seed default users (admin, moderators, authors)
 -- Passwords are hashed with bcrypt (default cost)
--- admin -> $2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
--- moderator1 -> $2a$10$8sGeFWLMFYqRXmJ7qKqLLeGjKzXQZqKVqKqLLeGjKzXQZqKVqKqLLe
--- author1 -> $2a$10$AaBbCcDdEeFfGgHhIiJjKkGjKzXQZqKVqKqLLeGjKzXQZqKVqKqLLe
+-- admin -> $2a$12$4TI0m2oSKIBC/bNr6F1GwOskpfG9Tld/QsbTbFL50AJGy.RgJTdDq
+-- moderator -> $2a$12$iDQsZgEVLi/QFP5f5Hm5IOhY.611B8azujYiVUA2jmsHTaDvvXBqa
+-- author -> $2a$12$YoZhAmUDcfM/h25uz11.VOX8Ufv5mjoAgCLxZhkKDoEkgtyX5JY4q
 
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@gmail.com') THEN
         INSERT INTO users (username, email, password_hash, role) VALUES
-        ('admin', 'admin@gmail.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'admin'),
-        ('moderator1', 'moderator1@gmail.com', '$2a$10$8sGeFWLMFYqRXmJ7qKqLLeGjKzXQZqKVqKqLLeGjKzXQZqKVqKqLLe', 'moderator'),
-        ('moderator2', 'moderator2@gmail.com', '$2a$10$8sGeFWLMFYqRXmJ7qKqLLeGjKzXQZqKVqKqLLeGjKzXQZqKVqKqLLe', 'moderator'),
-        ('moderator3', 'moderator3@gmail.com', '$2a$10$8sGeFWLMFYqRXmJ7qKqLLeGjKzXQZqKVqKqLLeGjKzXQZqKVqKqLLe', 'moderator'),
-        ('author1', 'author1@gmail.com', '$2a$10$AaBbCcDdEeFfGgHhIiJjKkGjKzXQZqKVqKqLLeGjKzXQZqKVqKqLLe', 'author'),
-        ('author2', 'author2@gmail.com', '$2a$10$AaBbCcDdEeFfGgHhIiJjKkGjKzXQZqKVqKqLLeGjKzXQZqKVqKqLLe', 'author'),
-        ('author3', 'author3@gmail.com', '$2a$10$AaBbCcDdEeFfGgHhIiJjKkGjKzXQZqKVqKqLLeGjKzXQZqKVqKqLLe', 'author');
-    END IF;
+        ('admin', 'admin@gmail.com', '$2a$12$4TI0m2oSKIBC/bNr6F1GwOskpfG9Tld/QsbTbFL50AJGy.RgJTdDq', 'admin'),
+        ('moderator', 'moderator1@gmail.com', '$2a$12$iDQsZgEVLi/QFP5f5Hm5IOhY.611B8azujYiVUA2jmsHTaDvvXBqa', 'moderator'),
+        ('author', 'author1@gmail.com', '$2a$12$YoZhAmUDcfM/h25uz11.VOX8Ufv5mjoAgCLxZhkKDoEkgtyX5JY4q', 'author'),
 END $$;
 
 -- Seed fake mangas

@@ -13,7 +13,6 @@ import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { UserManagementPage } from './pages/UserManagementPage';
 import { ContentModerationPage } from './pages/ContentModerationPage';
 import { ModerationLogsPage } from './pages/ModerationLogsPage';
-import { TagManagementPage } from './pages/TagManagementPage';
 import { TeamApplicationsPage } from './pages/TeamApplicationsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { Layout } from './components/Layout';
@@ -85,10 +84,6 @@ export const createAppRouter = () => {
         {
           path: '/admin/logs',
           element: <ModerationLogsPage />,
-        },
-        {
-          path: '/admin/tags',
-          element: <TagManagementPage />,
         },
         {
           path: '/admin/team-applications',

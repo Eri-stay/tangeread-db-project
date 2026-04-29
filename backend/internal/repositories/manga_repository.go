@@ -1,6 +1,8 @@
 package repositories
 
 import (
+	"strings"
+
 	"github.com/eri-stay/tangeread-db-project/backend/internal/models"
 	"gorm.io/gorm"
 )
@@ -17,7 +19,18 @@ type MangaRepository interface {
 	CreateChapter(chapter *models.Chapter) error
 	GetSimilarManga(mangaID uint, limit, offset int) ([]models.Manga, error)
 	GetPersonalizedRecommendations(userID uint, limit int) ([]models.Manga, error)
+	Search(query string, limit, offset int) ([]models.Manga, error)
+	GetFiltered(filters MangaFilters, limit, offset int) ([]models.Manga, error)
 	UpdateReadingHistory(userID, mangaID, chapterID uint) error
+}
+
+type MangaFilters struct {
+	Query   string
+	Tags    []uint
+	Status  []string
+	Format  []string
+	Sort    string
+	Exclude []uint
 }
 
 type postgresMangaRepository struct {
@@ -29,15 +42,132 @@ func NewMangaRepository(db *gorm.DB) MangaRepository {
 }
 
 func (r *postgresMangaRepository) GetAll(limit, offset int) ([]models.Manga, error) {
+	return r.GetFiltered(MangaFilters{}, limit, offset)
+}
+
+func (r *postgresMangaRepository) GetFiltered(filters MangaFilters, limit, offset int) ([]models.Manga, error) {
 	var mangas []models.Manga
-	err := r.db.Table("mangas").
+	db := r.db.Table("mangas").
 		Select("mangas.*, COALESCE(stats.avg_rating, 0) as avg_rating, COALESCE(stats.chapter_count, 0) as chapters_count").
 		Joins("LEFT JOIN manga_stats_mv stats ON stats.manga_id = mangas.id").
 		Preload("Tags").
-		Preload("Team").
-		Limit(limit).
-		Offset(offset).
-		Find(&mangas).Error
+		Preload("Team")
+
+	if filters.Query != "" {
+		likeQuery := "%" + filters.Query + "%"
+		db = db.Where("(mangas.title_ua ILIKE ? OR mangas.title_orig ILIKE ? OR similarity(mangas.title_ua, ?) > 0.2)", likeQuery, likeQuery, filters.Query)
+	}
+
+	if len(filters.Status) > 0 {
+		db = db.Where("mangas.status IN ?", filters.Status)
+	}
+	if len(filters.Format) > 0 {
+		db = db.Where("mangas.format IN ?", filters.Format)
+	}
+
+	if len(filters.Tags) > 0 {
+		// All tags must be present
+		for _, tagID := range filters.Tags {
+			db = db.Where("EXISTS (SELECT 1 FROM manga_tags WHERE manga_id = mangas.id AND tag_id = ?)", tagID)
+		}
+	}
+
+	if len(filters.Exclude) > 0 {
+		db = db.Where("NOT EXISTS (SELECT 1 FROM manga_tags WHERE manga_id = mangas.id AND tag_id IN ?)", filters.Exclude)
+	}
+
+	// Always filter by display_status active for catalog unless admin? (Let's keep it simple for now)
+	db = db.Where("mangas.display_status = ?", "active")
+
+	switch filters.Sort {
+	case "best-match":
+		if filters.Query != "" {
+			// Using strings.ReplaceAll prevents simple quote escaping issues
+			safeQuery := strings.ReplaceAll(filters.Query, "'", "''")
+			db = db.Order("similarity(mangas.title_ua, '" + safeQuery + "') DESC, mangas.title_ua ASC")
+		} else {
+			db = db.Order("mangas.created_at DESC")
+		}
+	case "rating":
+		db = db.Order("stats.avg_rating DESC NULLS LAST, mangas.title_ua ASC")
+	case "popularity":
+		// Use trending score if available or just rating count
+		db = db.Order("stats.rating_count DESC NULLS LAST, mangas.title_ua ASC")
+	case "updated":
+		db = db.Joins("LEFT JOIN (SELECT manga_id, MAX(created_at) as last_update FROM chapters GROUP BY manga_id) c ON c.manga_id = mangas.id").
+			Order("c.last_update DESC NULLS LAST, mangas.title_ua ASC")
+	case "alphabet":
+		db = db.Order("mangas.title_ua ASC")
+	case "newest":
+		db = db.Order("mangas.created_at DESC")
+	default:
+		db = db.Order("mangas.created_at DESC")
+	}
+
+	err := db.Limit(limit).Offset(offset).Find(&mangas).Error
+	return mangas, err
+}
+
+func (r *postgresMangaRepository) Search(query string, limit, offset int) ([]models.Manga, error) {
+	var mangas []models.Manga
+	sql := `
+    SELECT mangas.*, COALESCE(stats.avg_rating, 0) as avg_rating, COALESCE(stats.chapter_count, 0) as chapters_count,
+           similarity(mangas.title_ua, ?) as sim
+    FROM mangas
+    LEFT JOIN manga_stats_mv stats ON stats.manga_id = mangas.id
+    WHERE (mangas.title_ua ILIKE ? OR mangas.title_orig ILIKE ?)
+       OR similarity(mangas.title_ua, ?) > 0.2
+    ORDER BY sim DESC, mangas.title_ua ASC
+    LIMIT ? OFFSET ?
+    `
+
+	likeQuery := "%" + query + "%"
+	err := r.db.Raw(sql, query, likeQuery, likeQuery, query, limit, offset).Scan(&mangas).Error
+
+	if err == nil && len(mangas) > 0 {
+		mangaIDs := make([]uint, len(mangas))
+		for i := range mangas {
+			mangaIDs[i] = mangas[i].ID
+		}
+		var tags []struct {
+			MangaID uint
+			models.Tag
+		}
+		r.db.Table("tags").
+			Select("tags.*, manga_tags.manga_id").
+			Joins("JOIN manga_tags ON manga_tags.tag_id = tags.id").
+			Where("manga_tags.manga_id IN ?", mangaIDs).
+			Scan(&tags)
+
+		tagMap := make(map[uint][]models.Tag)
+		for _, t := range tags {
+			tagMap[t.MangaID] = append(tagMap[t.MangaID], t.Tag)
+		}
+		for i := range mangas {
+			mangas[i].Tags = tagMap[mangas[i].ID]
+		}
+
+		var teams []struct {
+			MangaID uint
+			models.Team
+		}
+		r.db.Table("teams").
+			Select("teams.*, mangas.id as manga_id").
+			Joins("JOIN mangas ON mangas.team_id = teams.id").
+			Where("mangas.id IN ?", mangaIDs).
+			Scan(&teams)
+
+		teamMap := make(map[uint]models.Team)
+		for _, t := range teams {
+			teamMap[t.MangaID] = t.Team
+		}
+		for i := range mangas {
+			if t, ok := teamMap[mangas[i].ID]; ok {
+				mangas[i].Team = &t
+			}
+		}
+	}
+
 	return mangas, err
 }
 

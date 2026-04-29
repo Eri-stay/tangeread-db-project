@@ -1,8 +1,14 @@
 package services
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+
 	"github.com/eri-stay/tangeread-db-project/backend/internal/models"
 	"github.com/eri-stay/tangeread-db-project/backend/internal/repositories"
+	s3storage "github.com/eri-stay/tangeread-db-project/backend/internal/storage/s3"
 )
 
 type MangaService interface {
@@ -17,15 +23,18 @@ type MangaService interface {
 	CreateChapter(chapter *models.Chapter) error
 	GetRecommendations(userID uint, limit int) ([]models.Manga, error)
 	GetSimilarManga(mangaID uint, limit, offset int) ([]models.Manga, error)
+	Search(query string, limit, offset int) ([]models.Manga, error)
+	GetFiltered(filters repositories.MangaFilters, limit, offset int) ([]models.Manga, error)
 	UpdateReadingHistory(userID, mangaID, chapterID uint) error
 }
 
 type mangaService struct {
-	mangaRepo repositories.MangaRepository
+	mangaRepo    repositories.MangaRepository
+	mediaStorage *s3storage.MediaStorage
 }
 
-func NewMangaService(mangaRepo repositories.MangaRepository) MangaService {
-	return &mangaService{mangaRepo: mangaRepo}
+func NewMangaService(mangaRepo repositories.MangaRepository, mediaStorage *s3storage.MediaStorage) MangaService {
+	return &mangaService{mangaRepo: mangaRepo, mediaStorage: mediaStorage}
 }
 
 func (s *mangaService) GetMangaList(limit, offset int) ([]models.Manga, error) {
@@ -45,7 +54,36 @@ func (s *mangaService) GetMangaByID(id uint) (*models.Manga, error) {
 }
 
 func (s *mangaService) GetChapter(mangaID uint, chapterNum float64) (*models.Chapter, error) {
-	return s.mangaRepo.GetChapter(mangaID, chapterNum)
+	chapter, err := s.mangaRepo.GetChapter(mangaID, chapterNum)
+	if err != nil {
+		return nil, err
+	}
+
+	if chapter.PagesURL == nil || *chapter.PagesURL == "" {
+		return chapter, nil
+	}
+
+	// Якщо в базі лежить повноцінний лінк (наприклад, заглушка Coming Soon)
+	if strings.HasPrefix(*chapter.PagesURL, "http") {
+		return chapter, nil // Віддаємо як є
+	}
+
+	// Якщо в базі шлях до папки (mangas/1/chapters/1/)
+	// Викликаємо S3 List і перетворюємо шлях на список лінків
+	files, err := s.mediaStorage.List(context.Background(), *chapter.PagesURL, 1)
+	if err == nil {
+		publicURL := os.Getenv("S3_PUBLIC_URL")
+		var fullLinks []string
+		for _, file := range files {
+			// S3_PUBLIC_URL + tangeread-media/ (root) + file
+			link := fmt.Sprintf("%s/tangeread-media/%s", strings.TrimSuffix(publicURL, "/"), strings.TrimPrefix(file, "/"))
+			fullLinks = append(fullLinks, link)
+		}
+		pagesString := strings.Join(fullLinks, ",")
+		chapter.PagesURL = &pagesString
+	}
+
+	return chapter, nil
 }
 
 func (s *mangaService) GetAuthorProjects(authorID uint) ([]models.Manga, error) {
@@ -70,6 +108,14 @@ func (s *mangaService) GetRecommendations(userID uint, limit int) ([]models.Mang
 
 func (s *mangaService) GetSimilarManga(mangaID uint, limit, offset int) ([]models.Manga, error) {
 	return s.mangaRepo.GetSimilarManga(mangaID, limit, offset)
+}
+
+func (s *mangaService) Search(query string, limit, offset int) ([]models.Manga, error) {
+	return s.mangaRepo.Search(query, limit, offset)
+}
+
+func (s *mangaService) GetFiltered(filters repositories.MangaFilters, limit, offset int) ([]models.Manga, error) {
+	return s.mangaRepo.GetFiltered(filters, limit, offset)
 }
 
 func (s *mangaService) UpdateReadingHistory(userID, mangaID, chapterID uint) error {

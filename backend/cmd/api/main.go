@@ -42,13 +42,7 @@ func main() {
 	mangaRepo := repositories.NewMangaRepository(database.DB)
 	commentRepo := repositories.NewCommentRepository(database.DB)
 
-	// 4. Initialize Services
-	authService := services.NewAuthService(userRepo)
-	userService := services.NewUserService(userRepo)
-	mangaService := services.NewMangaService(mangaRepo)
-	commentService := services.NewCommentService(commentRepo)
-
-	// 5. Initialize S3 Storage
+	// 4. Initialize S3 Storage
 	s3Bucket := os.Getenv("S3_BUCKET")
 	s3Region := os.Getenv("S3_REGION")
 	s3Endpoint := os.Getenv("S3_ENDPOINT")
@@ -73,7 +67,11 @@ func main() {
 	mediaStorage := s3storage.NewMediaStorage(s3Client, s3Bucket, "tangeread-media")
 	log.Printf("S3 Media Storage initialized for bucket: %s", s3Bucket)
 
-	_ = mediaStorage // Prevent unused variable error for now until injected
+	// 5. Initialize Services
+	authService := services.NewAuthService(userRepo)
+	userService := services.NewUserService(userRepo)
+	mangaService := services.NewMangaService(mangaRepo, mediaStorage)
+	commentService := services.NewCommentService(commentRepo)
 
 	// 6. Initialize Handlers
 	_, currentFile, _, _ := runtime.Caller(0)
@@ -85,6 +83,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(userService, mediaStorage)
 	mangaHandler := handlers.NewMangaHandler(mangaService, userService, mediaStorage)
 	adminHandler := handlers.NewAdminHandler(database.DB, seedScript)
+	moderationHandler := handlers.NewModerationHandler(database.DB)
 	commentHandler := handlers.NewCommentHandler(commentService)
 
 	// 7. Setup Gin Router
@@ -175,6 +174,17 @@ func main() {
 			users.POST("/team/:id/members", userHandler.AddTeamMember)
 			users.PATCH("/team/:id/members/:userId", userHandler.UpdateTeamMember)
 			users.DELETE("/team/:id/members/:userId", userHandler.RemoveTeamMember)
+		}
+
+		// Moderation routes
+		mod := api.Group("/moderation")
+		mod.Use(handlers.JWTMiddleware())
+		{
+			mod.GET("/manga", moderationHandler.GetManga)
+			mod.POST("/manga/:id/toggle", moderationHandler.ToggleMangaVisibility)
+			mod.GET("/comments", moderationHandler.GetComments)
+			mod.POST("/comments/:id/toggle", moderationHandler.ToggleCommentVisibility)
+			mod.GET("/logs", moderationHandler.GetLogs)
 		}
 	}
 

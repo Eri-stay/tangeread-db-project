@@ -211,7 +211,7 @@ export function AdminDashboardPage() {
               <Shield className="h-6 w-6 text-purple-400" />
             </div>
             <div className="text-3xl font-bold mb-1">{platformStats?.totalTeams?.toLocaleString() || '-'}</div>
-            <div className="text-sm text-muted-foreground">Активні команди</div>
+            <div className="text-sm text-muted-foreground">Всього команд</div>
             <p className="text-xs text-muted-foreground mt-2">Затверджені перекладацькі команди</p>
           </div>
 

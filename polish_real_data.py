@@ -51,22 +51,18 @@ def main():
             if current_ch_date > datetime.now():
                 current_ch_date = datetime.now()
 
-            # --- ГЕНЕРАЦІЯ СТОРІНОК ---
-            num_pages = random.randint(0, 22)
-            if num_pages == 0:
-                pages_string = f"https://placehold.co/800x1200/1a1a1a/white?text=Chapter+Coming+Soon+(ID:+{ch_id})"
+            has_pages = random.random() > 0.1
+
+            if not has_pages:
+                final_pages_value = f"https://placehold.co/800x1200/1a1a1a/white?text=Chapter+Coming+Soon+(Ch:+{ch_num})"
             else:
-                pages = [cover_url]
-                for p_num in range(2, num_pages + 1):
-                    placeholder = f"https://placehold.co/800x1200/1a1a1a/white?text=Page+{p_num}+-+ChID+{ch_id}"
-                    pages.append(placeholder)
-                pages_string = ",".join(pages)
+                final_pages_value = f"mangas/{m_id}/chapters/{ch_num}/"
 
             cur.execute("""
                 UPDATE chapters 
                 SET created_at = %s, pages_url = %s, view_count = %s
                 WHERE id = %s
-            """, (current_ch_date, pages_string, random.randint(50, 5000), ch_id))
+            """, (current_ch_date, final_pages_value, random.randint(50, 5000), ch_id))
             
             total_chapters_updated += 1
 
@@ -77,7 +73,6 @@ def main():
 
     print("2. Оновлення статистики (Materialized View)...")
     try:
-        # Використовуємо звичайний REFRESH, бо ми зупинили Go сервер і нам не треба CONCURRENTLY
         cur.execute("REFRESH MATERIALIZED VIEW manga_stats_mv;")
         conn.commit()
     except Exception as e:

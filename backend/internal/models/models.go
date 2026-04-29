@@ -163,6 +163,7 @@ type Tag struct {
 type Chapter struct {
 	ID            uint          `gorm:"primaryKey" json:"id"`
 	MangaID       uint          `gorm:"uniqueIndex:idx_manga_chapter;not null" json:"manga_id"`
+	Manga         *Manga        `json:"manga" gorm:"foreignKey:MangaID"`
 	Volume        *int          `json:"volume"`
 	ChapterNumber float64       `gorm:"uniqueIndex:idx_manga_chapter;type:decimal(6,2);not null" json:"chapter_number"`
 	Title         *string       `json:"title"`

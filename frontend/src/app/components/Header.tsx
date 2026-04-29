@@ -106,29 +106,16 @@ export function Header() {
             </span>
           </Link>
 
-          {/* Search Bar */}
-          <form onSubmit={handleSearch} className="hidden md:flex flex-1 max-w-md mx-8 gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Пошук манги..."
-                className="w-full pl-10 bg-secondary/50 border-border/50"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <Button 
-              type="button"
-              variant="outline" 
-              size="icon"
-              onClick={() => navigate('/catalog')}
-              title="Розширений пошук"
-              className="border-primary/50 hover:bg-primary/10"
+          {/* Navigation */}
+          <nav className="hidden md:flex items-center gap-6 flex-1 ml-8">
+            <Link 
+              to="/catalog" 
+              className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-2"
             >
-              <Filter className="h-4 w-4 text-primary" />
-            </Button>
-          </form>
+              <Filter className="h-4 w-4" />
+              Каталог
+            </Link>
+          </nav>
 
           {/* Profile Dropdown */}
           <DropdownMenu>
@@ -177,7 +164,7 @@ export function Header() {
               <DropdownMenuItem className="cursor-pointer" onClick={handleProfileClick}>
                 {!user ? 'Увійти / Зареєструватися' : 'Налаштування профілю'}
               </DropdownMenuItem>
-              {user && (user.role === 'author' || user.role === 'moderator' || user.role === 'admin') && (
+              {user && (user.role === 'author' || user.role === 'moderator') && (
                 <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/author/projects')}>
                   Робочий простір автора
                 </DropdownMenuItem>
@@ -203,31 +190,6 @@ export function Header() {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-
-        {/* Mobile Search */}
-        <div className="md:hidden px-4 pb-3">
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Пошук манги..."
-                className="w-full pl-10 bg-secondary/50 border-border/50"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <Button 
-              type="button"
-              variant="outline" 
-              size="icon"
-              onClick={() => navigate('/catalog')}
-              className="border-primary/50 hover:bg-primary/10"
-            >
-              <Filter className="h-4 w-4 text-primary" />
-            </Button>
-          </form>
         </div>
       </header>
 
