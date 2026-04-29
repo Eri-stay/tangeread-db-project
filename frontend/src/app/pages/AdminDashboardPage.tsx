@@ -36,6 +36,12 @@ interface GenreStat {
   value: number;
 }
 
+interface GenreChartData extends GenreData {
+  chartValue: number;
+  originalValue: number;
+  percentage: number;
+}
+
 interface RegistrationStat {
   month: string;
   count: number;
@@ -90,6 +96,7 @@ export function AdminDashboardPage() {
 
   const genreColors = ['#59631f', '#aeba68', '#8b9456', '#6b7542', '#4a5230', '#a3b060', '#c5d078'];
   const displayGenreData = genreStats.map((g, i) => ({ ...g, color: genreColors[i % genreColors.length] }));
+  const sortedGenreData = [...displayGenreData].sort((a, b) => b.value - a.value);
   const displayRegistrationData = registrationStats;
   const displayTeams = teamRankings;
 
@@ -121,6 +128,32 @@ export function AdminDashboardPage() {
   };
 
   const totalGenreViews = displayGenreData.reduce((sum, genre) => sum + genre.value, 0);
+  const topChartGenres = sortedGenreData.slice(0, 10);
+  const otherGenres = sortedGenreData.slice(10);
+  const otherTotal = otherGenres.reduce((sum, genre) => sum + genre.value, 0);
+  const topChartTotal = topChartGenres.reduce((sum, genre) => sum + genre.value, 0);
+  const cappedOtherChartValue =
+    otherTotal > 0 && topChartTotal > 0
+      ? Math.min(otherTotal, topChartTotal / 9)
+      : otherTotal;
+  const chartGenreData: GenreChartData[] = [
+    ...topChartGenres.map((genre) => ({
+      ...genre,
+      chartValue: genre.value,
+      originalValue: genre.value,
+      percentage: totalGenreViews > 0 ? (genre.value / totalGenreViews) * 100 : 0,
+    })),
+    ...(otherTotal > 0
+      ? [{
+        name: 'other...',
+        value: otherTotal,
+        chartValue: cappedOtherChartValue,
+        originalValue: otherTotal,
+        percentage: totalGenreViews > 0 ? (otherTotal / totalGenreViews) * 100 : 0,
+        color: genreColors[topChartGenres.length % genreColors.length],
+      }]
+      : []),
+  ];
 
   if (isLoading) {
     return (
@@ -254,16 +287,16 @@ export function AdminDashboardPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsPie>
                     <Pie
-                      data={displayGenreData}
+                      data={chartGenreData}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, payload }) => `${name} ${(payload.percentage || 0).toFixed(0)}%`}
                       outerRadius={100}
                       fill="#8884d8"
-                      dataKey="value"
+                      dataKey="chartValue"
                     >
-                      {displayGenreData.map((entry, index) => (
+                      {chartGenreData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
@@ -273,8 +306,8 @@ export function AdminDashboardPage() {
                         border: '1px solid #333',
                         borderRadius: '8px',
                       }}
-                      formatter={(value: number) => [
-                        `${value.toLocaleString()} (${((value / totalGenreViews) * 100).toFixed(1)}%)`,
+                      formatter={(_value: number, _name: string, entry: any) => [
+                        `${entry.payload.originalValue.toLocaleString()} (${entry.payload.percentage.toFixed(1)}%)`,
                         'Закладок',
                       ]}
                     />
@@ -284,8 +317,7 @@ export function AdminDashboardPage() {
             ) : (
               <div className="space-y-3 max-h-[320px] overflow-y-auto">
                 {displayGenreData.length > 0 ? (
-                  displayGenreData
-                    .sort((a, b) => b.value - a.value)
+                  sortedGenreData
                     .map((genre, index) => {
                       const percentage = ((genre.value / totalGenreViews) * 100).toFixed(1);
                       return (

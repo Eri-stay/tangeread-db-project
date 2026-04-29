@@ -24,3 +24,15 @@ UpdatedAt     time.Time `json:"_"`
 TimeAgo       string    `json:"timeAgo"`
 }
 
+type TeamApplicationDTO struct {
+	ID              uint      `json:"id"`
+	Name            string    `json:"name"`
+	Description     *string   `json:"description"`
+	Status          string    `json:"status"`
+	RejectionReason *string   `json:"rejection_reason,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	ApplicantID     uint      `json:"applicant_id"`
+	ApplicantName   string    `json:"applicant_name"`
+	ApplicantAvatar *string   `json:"applicant_avatar"`
+}
+

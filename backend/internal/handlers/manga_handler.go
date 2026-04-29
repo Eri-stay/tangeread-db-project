@@ -279,7 +279,7 @@ func (h *MangaHandler) UpdateManga(c *gin.Context) {
 	existingManga.Status = models.MangaStatus(input.Status)
 	existingManga.Format = models.MangaFormat(input.Format)
 	existingManga.ReleaseYear = &input.ReleaseYear
-	
+
 	if input.TeamID != nil {
 		existingManga.TeamID = input.TeamID
 	}
@@ -452,4 +452,50 @@ func (h *MangaHandler) UploadChapterPages(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"urls": urls})
+}
+
+func (h *MangaHandler) GetRecommendations(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		// Якщо не залогінений — віддаємо популярне
+		mangas, err := h.mangaService.GetTrending(12, 0)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch recommendations"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": mangas})
+		return
+	}
+
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "12"))
+
+	mangas, err := h.mangaService.GetRecommendations(userID.(uint), limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to calculate recommendations"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": mangas})
+}
+
+func (h *MangaHandler) GetSimilarManga(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid manga ID"})
+		return
+	}
+
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "12"))
+	if limit <= 0 {
+		limit = 12
+	}
+
+	mangas, err := h.mangaService.GetSimilarManga(uint(id), limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch similar manga"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": mangas})
 }

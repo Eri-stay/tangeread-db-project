@@ -15,6 +15,8 @@ type MangaRepository interface {
 	Create(manga *models.Manga, tagIDs []uint) error
 	Update(manga *models.Manga, tagIDs []uint) error
 	CreateChapter(chapter *models.Chapter) error
+	GetSimilarManga(mangaID uint, limit int) ([]models.Manga, error)
+	GetPersonalizedRecommendations(userID uint, limit int) ([]models.Manga, error)
 }
 
 type postgresMangaRepository struct {
@@ -31,6 +33,7 @@ func (r *postgresMangaRepository) GetAll(limit, offset int) ([]models.Manga, err
 		Select("mangas.*, COALESCE(stats.avg_rating, 0) as avg_rating, COALESCE(stats.chapter_count, 0) as chapters_count").
 		Joins("LEFT JOIN manga_stats_mv stats ON stats.manga_id = mangas.id").
 		Preload("Tags").
+		Preload("Team").
 		Limit(limit).
 		Offset(offset).
 		Find(&mangas).Error
@@ -45,6 +48,7 @@ func (r *postgresMangaRepository) GetLatestUpdated(limit, offset int) ([]models.
 		Joins("LEFT JOIN manga_stats_mv stats ON stats.manga_id = mangas.id").
 		Joins("JOIN chapters ON chapters.manga_id = mangas.id").
 		Preload("Tags").
+		Preload("Team").
 		Preload("Chapters", func(db *gorm.DB) *gorm.DB {
 			return db.Order("created_at DESC").Limit(1)
 		}).
@@ -99,6 +103,7 @@ func (r *postgresMangaRepository) GetTrending(limit, offset int) ([]models.Manga
 			GROUP BY manga_id
 		) trending ON trending.manga_id = mangas.id`).
 		Preload("Tags").
+		Preload("Team").
 		Where("mangas.display_status = ?", "active").
 		Order("(COALESCE(trending.score_week, 0) + 0.5 * COALESCE(trending.score_prev, 0)) DESC").
 		Limit(limit).
@@ -107,6 +112,7 @@ func (r *postgresMangaRepository) GetTrending(limit, offset int) ([]models.Manga
 
 	return mangas, err
 }
+
 func (r *postgresMangaRepository) GetByAuthorID(authorID uint) ([]models.Manga, error) {
 	var mangas []models.Manga
 	err := r.db.Table("mangas").
@@ -139,6 +145,7 @@ func (r *postgresMangaRepository) Create(manga *models.Manga, tagIDs []uint) err
 		return nil
 	})
 }
+
 func (r *postgresMangaRepository) Update(manga *models.Manga, tagIDs []uint) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Omit("Tags").Save(manga).Error; err != nil {
@@ -151,7 +158,7 @@ func (r *postgresMangaRepository) Update(manga *models.Manga, tagIDs []uint) err
 				return err
 			}
 		}
-		
+
 		if err := tx.Model(manga).Association("Tags").Replace(tags); err != nil {
 			return err
 		}
@@ -159,6 +166,195 @@ func (r *postgresMangaRepository) Update(manga *models.Manga, tagIDs []uint) err
 		return nil
 	})
 }
+
 func (r *postgresMangaRepository) CreateChapter(chapter *models.Chapter) error {
 	return r.db.Create(chapter).Error
+}
+
+func (r *postgresMangaRepository) GetSimilarManga(mangaID uint, limit int) ([]models.Manga, error) {
+	var mangas []models.Manga
+	query := `
+WITH 
+-- 1. Коефіцієнт Жаккара за тегами
+tag_similarity AS (
+    SELECT 
+        target.manga_id as other_id,
+        COUNT(*)::float / (
+            (SELECT COUNT(*) FROM manga_tags WHERE manga_id = ?) + 
+            (SELECT COUNT(*) FROM manga_tags WHERE manga_id = target.manga_id) - 
+            COUNT(*)
+        ) as jaccard_score
+    FROM manga_tags base
+    JOIN manga_tags target ON base.tag_id = target.tag_id
+    WHERE base.manga_id = ? AND target.manga_id != ?
+    GROUP BY target.manga_id
+),
+-- 2. Колаборативна схожість (люди, що читали цю, читали й іншу)
+user_similarity AS (
+    SELECT 
+        target.manga_id as other_id,
+        COUNT(*)::float / (SELECT COUNT(*) FROM user_manga_statuses WHERE manga_id = ?) as co_occurrence_score
+    FROM user_manga_statuses base
+    JOIN user_manga_statuses target ON base.user_id = target.user_id
+    WHERE base.manga_id = ? AND target.manga_id != ?
+    GROUP BY target.manga_id
+)
+SELECT m.*, COALESCE(mv.avg_rating, 0) as avg_rating, COALESCE(mv.chapter_count, 0) as chapters_count
+FROM mangas m
+LEFT JOIN tag_similarity ts ON ts.other_id = m.id
+LEFT JOIN user_similarity us ON us.other_id = m.id
+JOIN manga_stats_mv mv ON mv.manga_id = m.id
+WHERE m.display_status = 'active'
+ORDER BY (COALESCE(ts.jaccard_score, 0) * 0.6 + COALESCE(us.co_occurrence_score, 0) * 0.4) DESC
+LIMIT ?;`
+
+	err := r.db.Raw(query, mangaID, mangaID, mangaID, mangaID, mangaID, mangaID, limit).Scan(&mangas).Error
+	if err == nil && len(mangas) > 0 {
+		mangaIDs := make([]uint, len(mangas))
+		for i := range mangas {
+			mangaIDs[i] = mangas[i].ID
+		}
+		var tags []struct {
+			MangaID uint
+			models.Tag
+		}
+		r.db.Table("tags").
+			Select("tags.*, manga_tags.manga_id").
+			Joins("JOIN manga_tags ON manga_tags.tag_id = tags.id").
+			Where("manga_tags.manga_id IN ?", mangaIDs).
+			Scan(&tags)
+
+		tagMap := make(map[uint][]models.Tag)
+		for _, t := range tags {
+			tagMap[t.MangaID] = append(tagMap[t.MangaID], t.Tag)
+		}
+		for i := range mangas {
+			mangas[i].Tags = tagMap[mangas[i].ID]
+		}
+
+		// Also load teams for raw query results
+		var teams []struct {
+			MangaID uint
+			models.Team
+		}
+		r.db.Table("teams").
+			Select("teams.*, mangas.id as manga_id").
+			Joins("JOIN mangas ON mangas.team_id = teams.id").
+			Where("mangas.id IN ?", mangaIDs).
+			Scan(&teams)
+
+		teamMap := make(map[uint]models.Team)
+		for _, t := range teams {
+			teamMap[t.MangaID] = t.Team
+		}
+		for i := range mangas {
+			if t, ok := teamMap[mangas[i].ID]; ok {
+				mangas[i].Team = &t
+			}
+		}
+	}
+	return mangas, err
+}
+
+func (r *postgresMangaRepository) GetPersonalizedRecommendations(userID uint, limit int) ([]models.Manga, error) {
+	var mangas []models.Manga
+	query := `
+WITH 
+-- 1. Параметри для Байєсівського згладжування
+constants AS (
+    SELECT 
+        AVG(avg_rating) as global_mean, 
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY rating_count) as min_votes_threshold
+    FROM manga_stats_mv
+),
+-- 2. Зважений профіль інтересів користувача (Affinity Profile)
+user_affinity AS (
+    SELECT 
+        mt.tag_id, 
+        SUM(
+            CASE 
+                WHEN r.score IS NOT NULL THEN r.score - 5 -- Оцінка 10 дає +5, оцінка 1 дає -4
+                WHEN ums.status = 'completed' THEN 3
+                WHEN ums.status = 'reading' THEN 2
+                ELSE 0 
+            END
+        ) as affinity_score
+    FROM manga_tags mt
+    LEFT JOIN ratings r ON r.manga_id = mt.manga_id AND r.user_id = ?
+    LEFT JOIN user_manga_statuses ums ON ums.manga_id = mt.manga_id AND ums.user_id = ?
+    WHERE r.user_id IS NOT NULL OR ums.user_id IS NOT NULL
+    GROUP BY mt.tag_id
+    HAVING SUM(CASE WHEN r.score IS NOT NULL THEN r.score ELSE 0 END) > 0
+),
+-- 3. Розрахунок персонального балу з Байєсівським згладжуванням
+manga_scoring AS (
+    SELECT 
+        m.id as manga_id,
+        -- Bayesian Smoothed Rating
+        ((mv.rating_count * mv.avg_rating + c.min_votes_threshold * c.global_mean) / 
+         (mv.rating_count + c.min_votes_threshold)) as smoothed_rating,
+        -- Affinity Match
+        COALESCE(SUM(ua.affinity_score), 0) as user_match_score
+    FROM mangas m
+    JOIN manga_stats_mv mv ON mv.manga_id = m.id
+    CROSS JOIN constants c
+    LEFT JOIN manga_tags mt ON mt.manga_id = m.id
+    LEFT JOIN user_affinity ua ON ua.tag_id = mt.tag_id
+    WHERE m.id NOT IN (SELECT manga_id FROM user_manga_statuses WHERE user_id = ?)
+      AND m.display_status = 'active'
+    GROUP BY m.id, mv.rating_count, mv.avg_rating, c.min_votes_threshold, c.global_mean
+)
+SELECT m.*, COALESCE(mv.avg_rating, 0) as avg_rating, COALESCE(mv.chapter_count, 0) as chapters_count
+FROM mangas m
+JOIN manga_scoring ms ON ms.manga_id = m.id
+JOIN manga_stats_mv mv ON mv.manga_id = m.id
+ORDER BY (ms.user_match_score * 0.7 + ms.smoothed_rating * 0.3) DESC
+LIMIT ?;`
+
+	err := r.db.Raw(query, userID, userID, userID, limit).Scan(&mangas).Error
+	if err == nil && len(mangas) > 0 {
+		mangaIDs := make([]uint, len(mangas))
+		for i := range mangas {
+			mangaIDs[i] = mangas[i].ID
+		}
+		var tags []struct {
+			MangaID uint
+			models.Tag
+		}
+		r.db.Table("tags").
+			Select("tags.*, manga_tags.manga_id").
+			Joins("JOIN manga_tags ON manga_tags.tag_id = tags.id").
+			Where("manga_tags.manga_id IN ?", mangaIDs).
+			Scan(&tags)
+
+		tagMap := make(map[uint][]models.Tag)
+		for _, t := range tags {
+			tagMap[t.MangaID] = append(tagMap[t.MangaID], t.Tag)
+		}
+		for i := range mangas {
+			mangas[i].Tags = tagMap[mangas[i].ID]
+		}
+
+		// Also load teams for raw query results
+		var teams []struct {
+			MangaID uint
+			models.Team
+		}
+		r.db.Table("teams").
+			Select("teams.*, mangas.id as manga_id").
+			Joins("JOIN mangas ON mangas.team_id = teams.id").
+			Where("mangas.id IN ?", mangaIDs).
+			Scan(&teams)
+
+		teamMap := make(map[uint]models.Team)
+		for _, t := range teams {
+			teamMap[t.MangaID] = t.Team
+		}
+		for i := range mangas {
+			if t, ok := teamMap[mangas[i].ID]; ok {
+				mangas[i].Team = &t
+			}
+		}
+	}
+	return mangas, err
 }

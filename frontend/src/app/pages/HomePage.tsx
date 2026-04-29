@@ -7,28 +7,31 @@ import { Button } from '../components/ui/button';
 const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
 
 function mapManga(b: any): Manga {
-  const mappedTags = b.Tags && b.Tags.length > 0
-    ? b.Tags.map((t: any) => t.NameUk || t.NameEn || '')
-    : ['Фентезі'];
+  const mappedTags = b.tags && b.tags.length > 0
+    ? b.tags.map((t: any) => t.name_uk || t.name_en || '')
+    : [];
 
   return {
-    id: String(b.ID),
-    title: b.TitleUa || 'Невідома назва',
-    author: b.Team?.Name || 'Невідомо',
-    coverImage: b.CoverURL || 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=800&q=80',
+    id: String(b.id),
+    title: b.title_ua || b.title_orig || 'Невідома назва',
+    author: b.team?.name || 'Невідомо',
+    coverImage: b.cover_url || 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=800&q=80',
     rating: b.avg_rating || 0,
-    status: b.Status || 'ongoing',
-    format: b.Format || 'manga',
+    status: b.status || 'ongoing',
+    format: b.format || 'manga',
     chapters: b.chapters_count || 0,
-    description: b.Description || '',
-    genres: mappedTags,
+    description: b.description || '',
+    genres: mappedTags.slice(0, 3),
     tags: mappedTags,
-    lastUpdated: b.UpdatedAt ? new Date(b.UpdatedAt).toISOString().split('T')[0] : '2026-04-27',
+    lastUpdated: b.created_at ? new Date(b.created_at).toISOString().split('T')[0] : 'Невідомо',
   };
 }
 
-async function fetchSection(endpoint: string, limit: number, offset: number = 0): Promise<Manga[]> {
-  const res = await fetch(`${apiUrl}${endpoint}?limit=${limit}&offset=${offset}`);
+async function fetchSection(endpoint: string, limit: number, offset: number = 0, token?: string): Promise<Manga[]> {
+  const headers: any = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  
+  const res = await fetch(`${apiUrl}${endpoint}?limit=${limit}&offset=${offset}`, { headers });
   if (!res.ok) throw new Error('fetch error');
   const json = await res.json();
   return (json.data || []).map(mapManga);
@@ -37,6 +40,7 @@ async function fetchSection(endpoint: string, limit: number, offset: number = 0)
 export function HomePage() {
   const [trending, setTrending] = useState<Manga[]>([]);
   const [latest, setLatest] = useState<Manga[]>([]);
+  const [recommendations, setRecommendations] = useState<Manga[]>([]);
   const [latestPage, setLatestPage] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState<{ [key: string]: boolean }>({});
@@ -56,12 +60,15 @@ export function HomePage() {
     setIsLoading(true);
     setError('');
     try {
-      const [trendingData, latestData] = await Promise.all([
+      const token = localStorage.getItem('token') || undefined;
+      const [trendingData, latestData, recommendationsData] = await Promise.all([
         fetchSection('/manga/trending', 12, 0),
         fetchSection('/manga/latest', 120, 0),
+        fetchSection('/manga/recommendations', 12, 0, token),
       ]);
       setTrending(trendingData);
       setLatest(latestData);
+      setRecommendations(recommendationsData);
     } catch {
       setError('Не вдалося завантажити дані з сервера');
     } finally {
@@ -204,7 +211,11 @@ export function HomePage() {
                 className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth pb-4"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
-                {latest.slice(0, 10).map((manga) => <MangaCard key={manga.id} manga={manga} />)}
+                {recommendations.length > 0 ? (
+                  recommendations.map((manga) => <MangaCard key={manga.id} manga={manga} />)
+                ) : (
+                  latest.slice(0, 10).map((manga) => <MangaCard key={manga.id} manga={manga} />)
+                )}
               </div>
             </section>
 

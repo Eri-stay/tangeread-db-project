@@ -16,6 +16,7 @@ export function MangaDetailPage() {
   const [manga, setManga] = useState<Manga | null>(null);
   const [chapters, setChapters] = useState<any[]>([]);
   const [trending, setTrending] = useState<Manga[]>([]);
+  const [similarManga, setSimilarManga] = useState<Manga[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   
@@ -43,9 +44,10 @@ export function MangaDetailPage() {
     const loadData = async () => {
       setIsLoading(true);
       try {
-        const [mangaRes, trendingRes] = await Promise.all([
+        const [mangaRes, trendingRes, similarRes] = await Promise.all([
           fetch(`${apiUrl}/manga/${id}`),
-          fetch(`${apiUrl}/manga/trending?limit=10`)
+          fetch(`${apiUrl}/manga/trending?limit=10`),
+          fetch(`${apiUrl}/manga/${id}/similar?limit=10`)
         ]);
 
         if (!mangaRes.ok) throw new Error('Манґу не знайдено');
@@ -54,37 +56,54 @@ export function MangaDetailPage() {
         const trendingJson = await trendingRes.json();
 
         const b = mangaJson.data;
-        const mappedTags = b.Tags?.map((t: any) => t.NameUk || t.NameEn) || [];
+        const mappedTags = b.tags?.map((t: any) => t.name_uk || t.name_en) || [];
         
         const mappedManga: Manga = {
-          id: String(b.ID),
-          title: b.TitleUa || b.TitleEn || 'Невідома назва',
-          coverImage: b.CoverURL || 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=800&q=80',
-          author: b.Author || 'Невідомо',
+          id: String(b.id),
+          title: b.title_ua || b.title_orig || 'Невідома назва',
+          coverImage: b.cover_url || 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=800&q=80',
+          author: b.team?.name || 'Невідомо',
           rating: b.avg_rating || 0,
           chapters: b.chapters_count || 0,
           genres: mappedTags.slice(0, 3),
           tags: mappedTags,
-          description: b.Description || 'Опис відсутній',
-          status: b.Status || 'ongoing',
-          format: b.Format || 'manga',
-          lastUpdated: b.UpdatedAt ? new Date(b.UpdatedAt).toISOString().split('T')[0] : 'Невідомо',
-          team: b.Team?.Name || 'Немає команди',
+          description: b.description || 'Опис відсутній',
+          status: b.status || 'ongoing',
+          format: b.format || 'manga',
+          lastUpdated: b.created_at ? new Date(b.created_at).toISOString().split('T')[0] : 'Невідомо',
+          team: b.team?.name || 'Немає команди',
         };
 
         setManga(mappedManga);
-        setChapters(b.Chapters || []);
+        setChapters(b.chapters || []);
         
         if (trendingJson.data) {
           const mappedTrending = trendingJson.data.map((m: any) => ({
-            id: String(m.ID),
-            title: m.TitleUa || m.TitleEn || 'Невідома назва',
-            coverImage: m.CoverURL || '',
+            id: String(m.id),
+            title: m.title_ua || m.title_orig || 'Невідома назва',
+            coverImage: m.cover_url || '',
+            author: m.team?.name || 'Невідомо',
             rating: m.avg_rating || 0,
             chapters: m.chapters_count || 0,
-            genres: m.Tags?.slice(0, 3).map((t: any) => t.NameUk || t.NameEn) || [],
+            genres: m.tags?.slice(0, 3).map((t: any) => t.name_uk || t.name_en) || [],
           }));
           setTrending(mappedTrending);
+        }
+
+        if (similarRes.ok) {
+          const similarJson = await similarRes.json();
+          if (similarJson.data) {
+            const mappedSimilar = similarJson.data.map((m: any) => ({
+              id: String(m.id),
+              title: m.title_ua || m.title_orig || 'Невідома назва',
+              coverImage: m.cover_url || '',
+              author: m.team?.name || 'Невідомо',
+              rating: m.avg_rating || 0,
+              chapters: m.chapters_count || 0,
+              genres: m.tags?.slice(0, 3).map((t: any) => t.name_uk || t.name_en) || [],
+            }));
+            setSimilarManga(mappedSimilar);
+          }
         }
 
         // Fetch user status if logged in
@@ -520,10 +539,15 @@ export function MangaDetailPage() {
             className="flex gap-4 overflow-x-auto scrollbar-hide scroll-smooth pb-4"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
-            {/* Just show trending manga as similar for now */}
-            {trending.filter(m => m.id !== manga.id).slice(0, 8).map((m) => (
-              <MangaCard key={m.id} manga={m} />
-            ))}
+            {similarManga.length > 0 ? (
+              similarManga.map((m) => (
+                <MangaCard key={m.id} manga={m} />
+              ))
+            ) : (
+              trending.filter(m => m.id !== manga.id).slice(0, 8).map((m) => (
+                <MangaCard key={m.id} manga={m} />
+              ))
+            )}
           </div>
         </section>
       </div>

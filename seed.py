@@ -279,15 +279,27 @@ def main():
 
     # --- ЗАПИС РЕЙТИНГІВ ТА СПИСКІВ ---
     print("5. Збір реальних списків юзерів (Оцінки та Статуси)...")
+
+    # Створюємо лічильник для комітів
+    user_counter = 0
+
     for anilist_uid, u in users_data.items():
         if anilist_uid not in db_users:
             continue
 
         db_user_id = db_users[anilist_uid]
         list_data = make_request(QUERY_USER_LIST, {"userId": anilist_uid})
-        time.sleep(0.8)
 
-        if not list_data or 'errors' in list_data or not list_data['data']['MediaListCollection']:
+        # Обробка помилок API (включаючи Private User та Rate Limit)
+        if not list_data or 'errors' in list_data:
+            if list_data and 'errors' in list_data:
+                err_msg = list_data['errors'][0]['message']
+                if "Private User" in err_msg:
+                    print(f"   [!] Пропуск приватного профілю: {u['name']}")
+            time.sleep(0.5)
+            continue
+
+        if not list_data.get('data') or not list_data['data'].get('MediaListCollection'):
             continue
 
         for lst in list_data['data']['MediaListCollection']['lists']:
@@ -301,19 +313,28 @@ def main():
 
                     cur.execute("""
                         INSERT INTO user_manga_statuses (user_id, manga_id, status, is_favorite, created_at)
-                        VALUES (%s, %s, %s, false, NOW()) ON CONFLICT DO NOTHING;
+                        VALUES (%s, %s, %s, false, NOW()) ON CONFLICT (user_id, manga_id) DO NOTHING;
                     """, (db_user_id, db_manga_id, list_status))
 
                     if score > 0:
                         cur.execute("""
                             INSERT INTO ratings (user_id, manga_id, score, created_at)
-                            VALUES (%s, %s, %s, NOW()) ON CONFLICT DO NOTHING;
+                            VALUES (%s, %s, %s, NOW()) ON CONFLICT (user_id, manga_id) DO NOTHING;
                         """, (db_user_id, db_manga_id, score))
 
+        # ВАЖЛИВО: Комітимо кожні 20 користувачів, щоб звільнити пам'ять замків
+        user_counter += 1
+        if user_counter % 20 == 0:
+            conn.commit()
+            print(f"   [Прогрес] Оброблено {user_counter} користувачів...")
+
+        time.sleep(0.6)  # Тримаємо невелику паузу для Rate Limit
+
+    # Фінальне оновлення статистики після всіх вставок
+    print("6. Фінальне оновлення Materialized View...")
+    cur.execute("REFRESH MATERIALIZED VIEW manga_stats_mv;")
     conn.commit()
-    cur.close()
-    conn.close()
-    print("Готово!")
+    print("Усьо")
 
 
 if __name__ == '__main__':

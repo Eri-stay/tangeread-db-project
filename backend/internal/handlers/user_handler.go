@@ -323,6 +323,7 @@ func (h *UserHandler) GetUserTeam(c *gin.Context) {
 	}
 
 	var teamMember models.TeamMember
+	// Fetch the team the user belongs to
 	if err := database.DB.Where("user_id = ?", userID).First(&teamMember).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusOK, gin.H{"data": nil})
@@ -333,5 +334,200 @@ func (h *UserHandler) GetUserTeam(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": teamMember})
+	// Fetch full team with all members and their user details
+	var team models.Team
+	if err := database.DB.Preload("Members.User").First(&team, teamMember.TeamID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch team details"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": team})
+}
+
+// SubmitTeamApplication — POST /api/users/team-application
+// Any authenticated user (not only authors) can submit an application to create a team.
+func (h *UserHandler) SubmitTeamApplication(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	var input struct {
+		Name        string `json:"name" binding:"required"`
+		Description string `json:"description"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Prevent duplicate pending applications from the same user
+	var existing models.TeamApplication
+	err := database.DB.
+		Where("applied_by_id = ? AND status = ?", userID, models.TeamApplicationPending).
+		First(&existing).Error
+	if err == nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "You already have a pending application"})
+		return
+	}
+
+	desc := input.Description
+	app := models.TeamApplication{
+		Name:        input.Name,
+		Description: &desc,
+		AppliedByID: userID.(uint),
+		Status:      models.TeamApplicationPending,
+	}
+
+	if err := database.DB.Create(&app).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "Application submitted successfully",
+		"id":      app.ID,
+	})
+}
+
+// GetMyTeamApplication — GET /api/users/team-application
+// Returns the latest team application submitted by the current user (if any).
+func (h *UserHandler) GetMyTeamApplication(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	var app models.TeamApplication
+	err := database.DB.
+		Where("applied_by_id = ?", userID).
+		Order("created_at DESC").
+		First(&app).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusOK, gin.H{"data": nil})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": app})
+}
+
+// SearchUsers — GET /api/users/search?q=...
+func (h *UserHandler) SearchUsers(c *gin.Context) {
+	query := c.Query("q")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Search query is required"})
+		return
+	}
+
+	var users []models.User
+	if err := database.DB.Where("username ILIKE ? OR email ILIKE ?", "%"+query+"%", "%"+query+"%").Limit(10).Find(&users).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Search failed"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": users})
+}
+
+// AddTeamMember — POST /api/users/team/:id/members
+func (h *UserHandler) AddTeamMember(c *gin.Context) {
+	teamIDStr := c.Param("id")
+	teamID, _ := strconv.ParseUint(teamIDStr, 10, 32)
+	
+	requesterID, _ := c.Get("user_id")
+	
+	// Check if requester is leader
+	var requesterMember models.TeamMember
+	if err := database.DB.Where("team_id = ? AND user_id = ?", teamID, requesterID).First(&requesterMember).Error; err != nil || requesterMember.InternalRole != models.InternalRoleLeader {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only leaders can add members"})
+		return
+	}
+
+	var input struct {
+		UserID uint   `json:"user_id" binding:"required"`
+		Role   string `json:"role" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	newMember := models.TeamMember{
+		TeamID:       uint(teamID),
+		UserID:       input.UserID,
+		InternalRole: models.InternalRole(input.Role),
+	}
+
+	if err := database.DB.Create(&newMember).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add member"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "Member added successfully"})
+}
+
+// UpdateTeamMember — PATCH /api/users/team/:id/members/:userId
+func (h *UserHandler) UpdateTeamMember(c *gin.Context) {
+	teamIDStr := c.Param("id")
+	teamID, _ := strconv.ParseUint(teamIDStr, 10, 32)
+	targetUserIDStr := c.Param("userId")
+	targetUserID, _ := strconv.ParseUint(targetUserIDStr, 10, 32)
+	
+	requesterID, _ := c.Get("user_id")
+	
+	// Check if requester is leader
+	var requesterMember models.TeamMember
+	if err := database.DB.Where("team_id = ? AND user_id = ?", teamID, requesterID).First(&requesterMember).Error; err != nil || requesterMember.InternalRole != models.InternalRoleLeader {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only leaders can change roles"})
+		return
+	}
+
+	var input struct {
+		Role string `json:"role" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := database.DB.Model(&models.TeamMember{}).Where("team_id = ? AND user_id = ?", teamID, targetUserID).Update("internal_role", input.Role).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update member role"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Member role updated"})
+}
+
+// RemoveTeamMember — DELETE /api/users/team/:id/members/:userId
+func (h *UserHandler) RemoveTeamMember(c *gin.Context) {
+	teamIDStr := c.Param("id")
+	teamID, _ := strconv.ParseUint(teamIDStr, 10, 32)
+	targetUserIDStr := c.Param("userId")
+	targetUserID, _ := strconv.ParseUint(targetUserIDStr, 10, 32)
+	
+	requesterID, _ := c.Get("user_id")
+	
+	// Only leader can remove members, OR a member can remove themselves
+	isSelf := requesterID.(uint) == uint(targetUserID)
+	
+	if !isSelf {
+		var requesterMember models.TeamMember
+		if err := database.DB.Where("team_id = ? AND user_id = ?", teamID, requesterID).First(&requesterMember).Error; err != nil || requesterMember.InternalRole != models.InternalRoleLeader {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Only leaders can remove other members"})
+			return
+		}
+	}
+
+	if err := database.DB.Where("team_id = ? AND user_id = ?", teamID, targetUserID).Delete(&models.TeamMember{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove member"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Member removed"})
 }

@@ -1,160 +1,138 @@
-import { useState } from 'react';
-import { Check, X, Eye, Mail, User as UserIcon, Calendar } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Check, X, Eye, User as UserIcon, Calendar, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { AdminLayout } from '../components/AdminLayout';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
-interface TeamMember {
-  id: string;
-  nickname: string;
-  email: string;
-  avatar: string;
-}
+const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
 
 interface TeamApplication {
-  id: string;
-  teamName: string;
-  description: string;
-  applicant: {
-    id: string;
-    nickname: string;
-    email: string;
-    avatar: string;
-  };
-  initialMembers: TeamMember[];
-  submittedDate: string;
+  id: number;
+  name: string;
+  description?: string;
   status: 'pending' | 'approved' | 'rejected';
+  rejection_reason?: string;
+  created_at: string;
+  applicant_id: number;
+  applicant_name: string;
+  applicant_avatar?: string;
 }
 
-const mockApplications: TeamApplication[] = [
-  {
-    id: '1',
-    teamName: 'Moonlight Scanlations',
-    description: 'Професійна команда перекладачів з 5+ років досвіду роботи з японською мангою. Спеціалізуємося на романтичних та драматичних жанрах. Наша команда складається з кваліфікованих перекладачів, редакторів та клінерів.',
-    applicant: {
-      id: 'user1',
-      nickname: 'MoonlightLeader',
-      email: 'moonlight@example.com',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-    },
-    initialMembers: [
-      {
-        id: 'user2',
-        nickname: 'SakuraTranslator',
-        email: 'sakura@example.com',
-        avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
-      },
-      {
-        id: 'user3',
-        nickname: 'EditorPro',
-        email: 'editor@example.com',
-        avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-      },
-    ],
-    submittedDate: '2025-03-20',
-    status: 'pending',
-  },
-  {
-    id: '2',
-    teamName: 'Korean Wave Translations',
-    description: 'Команда ентузіастів корейської манхви. Перекладаємо виключно з корейської мови. У нас є досвід роботи з найпопулярнішими тайтлами жанру фентезі та бойовиків.',
-    applicant: {
-      id: 'user4',
-      nickname: 'KoreanMaster',
-      email: 'korean@example.com',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-    },
-    initialMembers: [
-      {
-        id: 'user5',
-        nickname: 'HangulExpert',
-        email: 'hangul@example.com',
-        avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-      },
-    ],
-    submittedDate: '2025-03-22',
-    status: 'pending',
-  },
-  {
-    id: '3',
-    teamName: 'Fantasy Realm Scans',
-    description: 'Нова команда, яка фокусується на фентезійних тайтлах. Маємо досвід у перекладі з англійської та японської мов.',
-    applicant: {
-      id: 'user6',
-      nickname: 'FantasyFan',
-      email: 'fantasy@example.com',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-    },
-    initialMembers: [],
-    submittedDate: '2025-03-24',
-    status: 'pending',
-  },
-  {
-    id: '4',
-    teamName: 'Speed Scans Team',
-    description: 'Швидкий переклад та якісна обробка. Наша команда спеціалізується на популярних сьонен тайтлах.',
-    applicant: {
-      id: 'user7',
-      nickname: 'SpeedyTL',
-      email: 'speedy@example.com',
-      avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150',
-    },
-    initialMembers: [
-      {
-        id: 'user8',
-        nickname: 'FastEditor',
-        email: 'fasteditor@example.com',
-        avatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150',
-      },
-      {
-        id: 'user9',
-        nickname: 'QuickCleaner',
-        email: 'quickcleaner@example.com',
-        avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
-      },
-      {
-        id: 'user10',
-        nickname: 'TypeFast',
-        email: 'typefast@example.com',
-        avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150',
-      },
-    ],
-    submittedDate: '2025-03-18',
-    status: 'approved',
-  },
-];
+function StatusBadge({ status }: { status: TeamApplication['status'] }) {
+  const map = {
+    pending:  { label: 'Очікує розгляду', cls: 'bg-[#aeba68]/20 text-[#aeba68] border border-[#aeba68]/30' },
+    approved: { label: 'Схвалено',        cls: 'bg-green-500/20 text-green-500 border border-green-500/30' },
+    rejected: { label: 'Відхилено',       cls: 'bg-destructive/20 text-destructive border border-destructive/30' },
+  };
+  const { label, cls } = map[status];
+  return <span className={`px-3 py-1 rounded-full text-xs font-medium ${cls}`}>{label}</span>;
+}
 
 export function TeamApplicationsPage() {
-  const [applications, setApplications] = useState<TeamApplication[]>(mockApplications);
-  const [selectedApplication, setSelectedApplication] = useState<TeamApplication | null>(null);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [applications, setApplications] = useState<TeamApplication[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Details modal
+  const [selectedApp, setSelectedApp] = useState<TeamApplication | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+
+  // Reject modal
+  const [rejectTarget, setRejectTarget] = useState<TeamApplication | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [isApproving, setIsApproving] = useState<number | null>(null);
+
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
 
-  const handleApprove = (id: string) => {
-    setApplications(prev =>
-      prev.map(app => app.id === id ? { ...app, status: 'approved' as const } : app)
-    );
+  const fetchApplications = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/admin/team-applications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Не вдалось завантажити заявки');
+      const json = await res.json();
+      setApplications(json.data ?? []);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleReject = (id: string) => {
-    setApplications(prev =>
-      prev.map(app => app.id === id ? { ...app, status: 'rejected' as const } : app)
-    );
+  useEffect(() => { fetchApplications(); }, []);
+
+  const handleApprove = async (app: TeamApplication) => {
+    setIsApproving(app.id);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/admin/team-applications/${app.id}/approve`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const j = await res.json();
+        throw new Error(j.error || 'Помилка при схваленні');
+      }
+      // Optimistic update
+      setApplications(prev => prev.map(a => a.id === app.id ? { ...a, status: 'approved' } : a));
+      if (selectedApp?.id === app.id) setSelectedApp(prev => prev ? { ...prev, status: 'approved' } : null);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setIsApproving(null);
+    }
   };
 
-  const handleViewDetails = (application: TeamApplication) => {
-    setSelectedApplication(application);
-    setShowDetailsModal(true);
+  const openRejectModal = (app: TeamApplication) => {
+    setRejectTarget(app);
+    setRejectReason('');
   };
 
-  const filteredApplications = applications.filter(app => 
-    filterStatus === 'all' ? true : app.status === filterStatus
-  );
+  const handleRejectConfirm = async () => {
+    if (!rejectTarget || !rejectReason.trim()) return;
+    setIsRejecting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/admin/team-applications/${rejectTarget.id}/reject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason: rejectReason }),
+      });
+      if (!res.ok) {
+        const j = await res.json();
+        throw new Error(j.error || 'Помилка при відхиленні');
+      }
+      setApplications(prev =>
+        prev.map(a => a.id === rejectTarget.id
+          ? { ...a, status: 'rejected', rejection_reason: rejectReason }
+          : a
+        )
+      );
+      if (selectedApp?.id === rejectTarget.id) {
+        setSelectedApp(prev => prev ? { ...prev, status: 'rejected', rejection_reason: rejectReason } : null);
+      }
+      setRejectTarget(null);
+      setRejectReason('');
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setIsRejecting(false);
+    }
+  };
 
-  const pendingCount = applications.filter(app => app.status === 'pending').length;
-  const approvedCount = applications.filter(app => app.status === 'approved').length;
-  const rejectedCount = applications.filter(app => app.status === 'rejected').length;
+  const filtered = applications.filter(a => filterStatus === 'all' || a.status === filterStatus);
+  const pendingCount  = applications.filter(a => a.status === 'pending').length;
+  const approvedCount = applications.filter(a => a.status === 'approved').length;
+  const rejectedCount = applications.filter(a => a.status === 'rejected').length;
 
   return (
     <AdminLayout>
@@ -168,11 +146,15 @@ export function TeamApplicationsPage() {
                 Перегляд та модерація заявок на створення перекладацьких команд
               </p>
             </div>
+            <Button variant="outline" size="sm" onClick={fetchApplications} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Оновити
+            </Button>
           </div>
           <div className="h-px bg-gradient-to-r from-primary/50 via-primary/20 to-transparent" />
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-card border border-border rounded-lg p-4">
             <div className="text-sm text-muted-foreground mb-1">Всього заявок</div>
@@ -193,263 +175,243 @@ export function TeamApplicationsPage() {
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex gap-2 mb-6">
-          <Button
-            variant={filterStatus === 'all' ? 'default' : 'outline'}
-            onClick={() => setFilterStatus('all')}
-            className={filterStatus === 'all' ? 'bg-[#59631f] hover:bg-[#59631f]/90' : ''}
-          >
-            Всі ({applications.length})
-          </Button>
-          <Button
-            variant={filterStatus === 'pending' ? 'default' : 'outline'}
-            onClick={() => setFilterStatus('pending')}
-            className={filterStatus === 'pending' ? 'bg-[#aeba68] hover:bg-[#aeba68]/90' : ''}
-          >
-            Очікують ({pendingCount})
-          </Button>
-          <Button
-            variant={filterStatus === 'approved' ? 'default' : 'outline'}
-            onClick={() => setFilterStatus('approved')}
-            className={filterStatus === 'approved' ? 'bg-green-600 hover:bg-green-600/90' : ''}
-          >
-            Схвалено ({approvedCount})
-          </Button>
-          <Button
-            variant={filterStatus === 'rejected' ? 'default' : 'outline'}
-            onClick={() => setFilterStatus('rejected')}
-            className={filterStatus === 'rejected' ? 'bg-destructive hover:bg-destructive/90' : ''}
-          >
-            Відхилено ({rejectedCount})
-          </Button>
-        </div>
-
-        {/* Applications List */}
-        <div className="space-y-4">
-          {filteredApplications.map((application) => (
-            <div
-              key={application.id}
-              className="bg-card border border-border rounded-lg p-6 hover:border-primary/30 transition-colors"
+        <div className="flex gap-2 mb-6 flex-wrap">
+          {([
+            { key: 'all',      label: `Всі (${applications.length})`,    cls: 'bg-[#59631f] hover:bg-[#59631f]/90' },
+            { key: 'pending',  label: `Очікують (${pendingCount})`,      cls: 'bg-[#aeba68] hover:bg-[#aeba68]/90' },
+            { key: 'approved', label: `Схвалено (${approvedCount})`,     cls: 'bg-green-600 hover:bg-green-600/90' },
+            { key: 'rejected', label: `Відхилено (${rejectedCount})`,    cls: 'bg-destructive hover:bg-destructive/90' },
+          ] as const).map(({ key, label, cls }) => (
+            <Button
+              key={key}
+              variant={filterStatus === key ? 'default' : 'outline'}
+              onClick={() => setFilterStatus(key)}
+              className={filterStatus === key ? cls : ''}
             >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-xl font-semibold">{application.teamName}</h3>
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        application.status === 'pending'
-                          ? 'bg-[#aeba68]/20 text-[#aeba68] border border-[#aeba68]/30'
-                          : application.status === 'approved'
-                          ? 'bg-green-500/20 text-green-500 border border-green-500/30'
-                          : 'bg-destructive/20 text-destructive border border-destructive/30'
-                      }`}
-                    >
-                      {application.status === 'pending'
-                        ? 'Очікує розгляду'
-                        : application.status === 'approved'
-                        ? 'Схвалено'
-                        : 'Відхилено'}
-                    </span>
-                  </div>
-                  <p className="text-muted-foreground text-sm line-clamp-2 mb-3">
-                    {application.description}
-                  </p>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <UserIcon className="h-4 w-4" />
-                      <span>Заявник: {application.applicant.nickname}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      <span>{new Date(application.submittedDate).toLocaleDateString('uk-UA')}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <UserIcon className="h-4 w-4" />
-                      <span>Початковий склад: {application.initialMembers.length} осіб</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2 pt-4 border-t border-border">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleViewDetails(application)}
-                  className="gap-2"
-                >
-                  <Eye className="h-4 w-4" />
-                  Переглянути деталі
-                </Button>
-                {application.status === 'pending' && (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={() => handleApprove(application.id)}
-                      className="gap-2 bg-green-600 hover:bg-green-600/90"
-                    >
-                      <Check className="h-4 w-4" />
-                      Схвалити
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleReject(application.id)}
-                      className="gap-2 text-destructive hover:bg-destructive/10 border-destructive/30"
-                    >
-                      <X className="h-4 w-4" />
-                      Відхилити
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
+              {label}
+            </Button>
           ))}
-
-          {filteredApplications.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              <p>Немає заявок з таким статусом</p>
-            </div>
-          )}
         </div>
-      </div>
 
-      {/* Details Modal */}
-      <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-        <DialogContent className="bg-card border-border max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">{selectedApplication?.teamName}</DialogTitle>
-            <DialogDescription>
-              Детальна інформація про заявку на створення команди
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedApplication && (
-            <div className="space-y-6 py-4">
-              {/* Status */}
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Статус</h3>
-                <span
-                  className={`inline-block px-4 py-2 rounded-full text-sm font-medium ${
-                    selectedApplication.status === 'pending'
-                      ? 'bg-[#aeba68]/20 text-[#aeba68] border border-[#aeba68]/30'
-                      : selectedApplication.status === 'approved'
-                      ? 'bg-green-500/20 text-green-500 border border-green-500/30'
-                      : 'bg-destructive/20 text-destructive border border-destructive/30'
-                  }`}
-                >
-                  {selectedApplication.status === 'pending'
-                    ? 'Очікує розгляду'
-                    : selectedApplication.status === 'approved'
-                    ? 'Схвалено'
-                    : 'Відхилено'}
-                </span>
-              </div>
-
-              {/* Description */}
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Опис команди</h3>
-                <p className="text-foreground leading-relaxed">{selectedApplication.description}</p>
-              </div>
-
-              {/* Applicant */}
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-3">Заявник</h3>
-                <div className="flex items-center gap-4 p-4 bg-secondary/30 rounded-lg border border-border">
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-secondary border-2 border-border">
-                    <ImageWithFallback
-                      src={selectedApplication.applicant.avatar}
-                      alt={selectedApplication.applicant.nickname}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">{selectedApplication.applicant.nickname}</p>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Mail className="h-3 w-3" />
-                      <span>{selectedApplication.applicant.email}</span>
+        {/* Body */}
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+            <Loader2 className="h-10 w-10 animate-spin mb-4 text-primary" />
+            <p>Завантаження заявок...</p>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center py-20 text-destructive">
+            <AlertCircle className="h-10 w-10 mb-4" />
+            <p className="font-medium mb-2">{error}</p>
+            <Button variant="outline" onClick={fetchApplications} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Спробувати знову
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filtered.map(app => (
+              <div
+                key={app.id}
+                className="bg-card border border-border rounded-lg p-6 hover:border-primary/30 transition-colors"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
+                      <h3 className="text-xl font-semibold">{app.name}</h3>
+                      <StatusBadge status={app.status} />
                     </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Initial Members */}
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-3">
-                  Початковий склад ({selectedApplication.initialMembers.length})
-                </h3>
-                {selectedApplication.initialMembers.length > 0 ? (
-                  <div className="space-y-2">
-                    {selectedApplication.initialMembers.map((member) => (
-                      <div
-                        key={member.id}
-                        className="flex items-center gap-4 p-3 bg-secondary/30 rounded-lg border border-border"
-                      >
-                        <div className="w-10 h-10 rounded-full overflow-hidden bg-secondary border-2 border-border">
+                    {app.description && (
+                      <p className="text-muted-foreground text-sm line-clamp-2 mb-3">{app.description}</p>
+                    )}
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full overflow-hidden bg-secondary border border-border">
                           <ImageWithFallback
-                            src={member.avatar}
-                            alt={member.nickname}
+                            src={app.applicant_avatar || ''}
+                            alt={app.applicant_name}
                             className="w-full h-full object-cover"
                           />
                         </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-sm">{member.nickname}</p>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Mail className="h-3 w-3" />
-                            <span>{member.email}</span>
-                          </div>
-                        </div>
+                        <span>{app.applicant_name}</span>
                       </div>
-                    ))}
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        <span>{new Date(app.created_at).toLocaleDateString('uk-UA')}</span>
+                      </div>
+                    </div>
+                    {app.status === 'rejected' && app.rejection_reason && (
+                      <p className="mt-2 text-sm text-destructive/80 italic">
+                        Причина відхилення: {app.rejection_reason}
+                      </p>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground italic">
-                    Початковий склад не вказано. Члени команди будуть додані пізніше.
-                  </p>
-                )}
-              </div>
+                </div>
 
-              {/* Submission Date */}
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Дата подання</h3>
-                <p className="text-foreground">
-                  {new Date(selectedApplication.submittedDate).toLocaleDateString('uk-UA', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
-                </p>
-              </div>
-
-              {/* Actions */}
-              {selectedApplication.status === 'pending' && (
-                <div className="flex gap-3 pt-4 border-t border-border">
+                {/* Actions */}
+                <div className="flex gap-2 pt-4 border-t border-border flex-wrap">
                   <Button
-                    onClick={() => {
-                      handleApprove(selectedApplication.id);
-                      setShowDetailsModal(false);
-                    }}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setSelectedApp(app); setShowDetails(true); }}
+                    className="gap-2"
+                  >
+                    <Eye className="h-4 w-4" />
+                    Деталі
+                  </Button>
+
+                  {app.status === 'pending' && (
+                    <>
+                      <Button
+                        size="sm"
+                        onClick={() => handleApprove(app)}
+                        disabled={isApproving === app.id}
+                        className="gap-2 bg-green-600 hover:bg-green-600/90"
+                      >
+                        {isApproving === app.id
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <Check className="h-4 w-4" />}
+                        Схвалити
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openRejectModal(app)}
+                        className="gap-2 text-destructive hover:bg-destructive/10 border-destructive/30"
+                      >
+                        <X className="h-4 w-4" />
+                        Відхилити
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {filtered.length === 0 && (
+              <div className="text-center py-16 text-muted-foreground">
+                <UserIcon className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                <p>Немає заявок з таким статусом</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Details Modal ── */}
+      <Dialog open={showDetails} onOpenChange={setShowDetails}>
+        <DialogContent className="bg-card border-border max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">{selectedApp?.name}</DialogTitle>
+            <DialogDescription>Детальна інформація про заявку</DialogDescription>
+          </DialogHeader>
+
+          {selectedApp && (
+            <div className="space-y-5 py-2">
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Статус</p>
+                <StatusBadge status={selectedApp.status} />
+              </div>
+
+              {selectedApp.description && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-2">Опис команди</p>
+                  <p className="text-foreground leading-relaxed text-sm">{selectedApp.description}</p>
+                </div>
+              )}
+
+              <div>
+                <p className="text-xs text-muted-foreground mb-3">Заявник</p>
+                <div className="flex items-center gap-3 p-3 bg-secondary/30 rounded-lg border border-border">
+                  <div className="w-10 h-10 rounded-full overflow-hidden bg-secondary border-2 border-border flex-shrink-0">
+                    <ImageWithFallback
+                      src={selectedApp.applicant_avatar || ''}
+                      alt={selectedApp.applicant_name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div>
+                    <p className="font-medium">{selectedApp.applicant_name}</p>
+                    <p className="text-xs text-muted-foreground">ID: {selectedApp.applicant_id}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Дата подання</p>
+                <p className="text-sm">{new Date(selectedApp.created_at).toLocaleDateString('uk-UA', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              </div>
+
+              {selectedApp.status === 'rejected' && selectedApp.rejection_reason && (
+                <div className="p-3 bg-destructive/10 rounded-lg border border-destructive/20">
+                  <p className="text-xs text-muted-foreground mb-1">Причина відхилення</p>
+                  <p className="text-sm text-destructive">{selectedApp.rejection_reason}</p>
+                </div>
+              )}
+
+              {selectedApp.status === 'pending' && (
+                <div className="flex gap-3 pt-2 border-t border-border">
+                  <Button
+                    onClick={() => { handleApprove(selectedApp); setShowDetails(false); }}
+                    disabled={isApproving === selectedApp.id}
                     className="flex-1 bg-green-600 hover:bg-green-600/90 gap-2"
                   >
-                    <Check className="h-4 w-4" />
+                    {isApproving === selectedApp.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                     Схвалити заявку
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      handleReject(selectedApplication.id);
-                      setShowDetailsModal(false);
-                    }}
+                    onClick={() => { openRejectModal(selectedApp); setShowDetails(false); }}
                     className="flex-1 text-destructive hover:bg-destructive/10 border-destructive/30 gap-2"
                   >
                     <X className="h-4 w-4" />
-                    Відхилити заявку
+                    Відхилити
                   </Button>
                 </div>
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reject Modal ── */}
+      <Dialog open={!!rejectTarget} onOpenChange={(open) => { if (!open) setRejectTarget(null); }}>
+        <DialogContent className="bg-card border-border max-w-md">
+          <DialogHeader>
+            <DialogTitle>Відхилення заявки</DialogTitle>
+            <DialogDescription>
+              Вкажіть причину відхилення заявки <strong>{rejectTarget?.name}</strong>.
+              Заявник побачить цю причину.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <Textarea
+              id="reject-reason"
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              placeholder="Причина відхилення..."
+              className="bg-secondary border-border min-h-[100px]"
+            />
+
+            <div className="flex gap-3">
+              <Button
+                onClick={handleRejectConfirm}
+                disabled={!rejectReason.trim() || isRejecting}
+                className="flex-1 bg-destructive hover:bg-destructive/90 gap-2"
+              >
+                {isRejecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                Підтвердити відхилення
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setRejectTarget(null)}
+                disabled={isRejecting}
+              >
+                Скасувати
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </AdminLayout>

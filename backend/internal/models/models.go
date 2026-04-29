@@ -105,11 +105,11 @@ type User struct {
 }
 
 type Team struct {
-	ID          uint    `gorm:"primaryKey"`
-	Name        string  `gorm:"uniqueIndex;not null"`
-	Description *string `gorm:"type:text"`
-	CreatedAt   time.Time
-	Members     []TeamMember
+	ID          uint    `gorm:"primaryKey" json:"id"`
+	Name        string  `gorm:"uniqueIndex;not null" json:"name"`
+	Description *string `gorm:"type:text" json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	Members     []TeamMember `json:"members,omitempty"`
 }
 
 type TeamApplication struct {
@@ -135,21 +135,21 @@ type TeamMember struct {
 }
 
 type Manga struct {
-	ID            uint   `gorm:"primaryKey"`
-	TitleUa       string `gorm:"not null"`
-	TitleOrig     *string
-	Description   *string `gorm:"type:text"`
-	CoverURL      *string
-	Status        MangaStatus `gorm:"type:varchar(20);not null;default:'ongoing'"`
-	Format        MangaFormat `gorm:"type:varchar(20);not null"`
-	ReleaseYear   *int
-	TeamID        *uint
-	Team          *Team
-	DisplayStatus DisplayStatus `gorm:"type:varchar(20);not null;default:'active'"`
-	CreatedAt     time.Time
-	PublishedAt   *time.Time
-	Tags          []Tag     `gorm:"many2many:manga_tags;"`
-	Chapters      []Chapter `gorm:"foreignKey:MangaID;constraint:OnDelete:CASCADE;"`
+	ID            uint   `gorm:"primaryKey" json:"id"`
+	TitleUa       string `gorm:"not null" json:"title_ua"`
+	TitleOrig     *string `json:"title_orig"`
+	Description   *string `gorm:"type:text" json:"description"`
+	CoverURL      *string `json:"cover_url"`
+	Status        MangaStatus `gorm:"type:varchar(20);not null;default:'ongoing'" json:"status"`
+	Format        MangaFormat `gorm:"type:varchar(20);not null" json:"format"`
+	ReleaseYear   *int `json:"release_year"`
+	TeamID        *uint `json:"team_id"`
+	Team          *Team `json:"team"`
+	DisplayStatus DisplayStatus `gorm:"type:varchar(20);not null;default:'active'" json:"display_status"`
+	CreatedAt     time.Time `json:"created_at"`
+	PublishedAt   *time.Time `json:"published_at"`
+	Tags          []Tag     `gorm:"many2many:manga_tags;" json:"tags"`
+	Chapters      []Chapter `gorm:"foreignKey:MangaID;constraint:OnDelete:CASCADE;" json:"chapters"`
 	AvgRating     float64   `json:"avg_rating" gorm:"->"`     // Read-only field
 	ChaptersCount int       `json:"chapters_count" gorm:"->"` // Read-only field
 }

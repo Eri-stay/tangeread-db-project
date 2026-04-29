@@ -111,6 +111,8 @@ func main() {
 			manga.GET("/:id", mangaHandler.GetMangaByID)
 			manga.GET("/:id/chapters/:number", mangaHandler.GetChapter)
 			manga.GET("/tags/all", mangaHandler.GetTags)
+			manga.GET("/recommendations", mangaHandler.GetRecommendations)
+			manga.GET("/:id/similar", mangaHandler.GetSimilarManga)
 		}
 
 		// Admin routes (JWT required + admin role check inside handler)
@@ -123,6 +125,9 @@ func main() {
 			admin.GET("/genre-stats", adminHandler.GetGenreStats)
 			admin.GET("/registration-stats", adminHandler.GetRegistrationStats)
 			admin.GET("/team-stats", adminHandler.GetTeamStats)
+			admin.GET("/team-applications", adminHandler.GetTeamApplications)
+			admin.POST("/team-applications/:id/approve", adminHandler.ApproveTeamApplication)
+			admin.POST("/team-applications/:id/reject", adminHandler.RejectTeamApplication)
 		}
 
 		// Author routes
@@ -152,6 +157,12 @@ func main() {
 			users.POST("/manga/:id/status", userHandler.UpdateMangaStatus)
 			users.POST("/manga/:id/rate", userHandler.RateManga)
 			users.GET("/team", userHandler.GetUserTeam)
+			users.POST("/team-application", userHandler.SubmitTeamApplication)
+			users.GET("/team-application", userHandler.GetMyTeamApplication)
+			users.GET("/search", userHandler.SearchUsers)
+			users.POST("/team/:id/members", userHandler.AddTeamMember)
+			users.PATCH("/team/:id/members/:userId", userHandler.UpdateTeamMember)
+			users.DELETE("/team/:id/members/:userId", userHandler.RemoveTeamMember)
 		}
 	}
 

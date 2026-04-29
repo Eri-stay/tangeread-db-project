@@ -1,12 +1,16 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"time"
 
+	"github.com/eri-stay/tangeread-db-project/backend/internal/models"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -267,23 +271,10 @@ WITH tag_counts AS (
   JOIN manga_tags mt ON mt.tag_id = t.id
   JOIN user_manga_statuses ums ON ums.manga_id = mt.manga_id
   GROUP BY t.id, t.name_uk
-),
-ranked AS (
-  SELECT *,
-         ROW_NUMBER() OVER (ORDER BY count DESC) AS rn
-  FROM tag_counts
 )
 SELECT name, count
-FROM ranked
-WHERE rn <= 10
-
-UNION ALL
-
-SELECT 'other...' AS name, COALESCE(SUM(count), 0)
-FROM ranked
-WHERE rn > 10
-
-ORDER BY count DESC;
+FROM tag_counts
+ORDER BY count DESC, name ASC;
 	`).Rows()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -411,4 +402,190 @@ func (h *AdminHandler) GetTeamStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, stats)
+}
+
+// GetTeamApplications — GET /api/admin/team-applications  (admin only)
+// Returns a list of all team applications, with optional ?status= filter.
+func (h *AdminHandler) GetTeamApplications(c *gin.Context) {
+	if err := h.checkAdmin(c); err != nil {
+		return
+	}
+
+	status := c.Query("status") // empty = all
+
+	var apps []models.TeamApplicationDTO
+	query := h.db.Table("team_applications ta").
+		Select(`ta.id, ta.name, ta.description, ta.status,
+                ta.rejection_reason, ta.created_at,
+                ta.applied_by_id AS applicant_id,
+                u.username AS applicant_name,
+                u.avatar_url AS applicant_avatar`).
+		Joins("JOIN users u ON u.id = ta.applied_by_id").
+		Order("ta.created_at DESC")
+
+	if status != "" {
+		query = query.Where("ta.status = ?", status)
+	}
+
+	if err := query.Scan(&apps).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if apps == nil {
+		apps = []models.TeamApplicationDTO{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": apps, "total": len(apps)})
+}
+
+// ApproveTeamApplication — POST /api/admin/team-applications/:id/approve  (admin only)
+// Atomically: approves the application, creates the team, adds applicant as leader,
+// promotes the applicant to 'author' role, and writes an admin log entry.
+func (h *AdminHandler) ApproveTeamApplication(c *gin.Context) {
+	if err := h.checkAdmin(c); err != nil {
+		return
+	}
+
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid application ID"})
+		return
+	}
+
+	adminID := c.MustGet("user_id").(uint)
+
+	txErr := h.db.Transaction(func(tx *gorm.DB) error {
+		// 1. Load and guard
+		var app models.TeamApplication
+		if err := tx.First(&app, appID).Error; err != nil {
+			return err
+		}
+		if app.Status != models.TeamApplicationPending {
+			return errors.New("application is not pending")
+		}
+
+		// 2. Approve the application
+		now := time.Now()
+		if err := tx.Model(&app).Updates(map[string]any{
+			"status":         models.TeamApplicationApproved,
+			"reviewed_by_id": adminID,
+			"updated_at":     now,
+		}).Error; err != nil {
+			return err
+		}
+
+		// 3. Create the team
+		team := models.Team{
+			Name:        app.Name,
+			Description: app.Description,
+		}
+		if err := tx.Create(&team).Error; err != nil {
+			return err
+		}
+
+		// 4. Add applicant as team leader
+		member := models.TeamMember{
+			UserID:       app.AppliedByID,
+			TeamID:       team.ID,
+			InternalRole: models.InternalRoleLeader,
+		}
+		if err := tx.Create(&member).Error; err != nil {
+			return err
+		}
+
+		// 5. Promote applicant to 'author' role
+		if err := tx.Model(&models.User{}).Where("id = ?", app.AppliedByID).
+			Update("role", models.UserRoleAuthor).Error; err != nil {
+			return err
+		}
+
+		// 6. Write admin log
+		targetUser := app.AppliedByID
+		log := models.AdminLog{
+			AdminID:      adminID,
+			ActionType:   models.AdminActionApproveTeam,
+			TargetUserID: &targetUser,
+		}
+		return tx.Create(&log).Error
+	})
+
+	if txErr != nil {
+		if txErr.Error() == "application is not pending" {
+			c.JSON(http.StatusConflict, gin.H{"error": txErr.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": txErr.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Application approved"})
+}
+
+// RejectTeamApplication — POST /api/admin/team-applications/:id/reject  (admin only)
+// Body: { "reason": "string" } (required)
+func (h *AdminHandler) RejectTeamApplication(c *gin.Context) {
+	if err := h.checkAdmin(c); err != nil {
+		return
+	}
+
+	appID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid application ID"})
+		return
+	}
+
+	adminID := c.MustGet("user_id").(uint)
+
+	var body struct {
+		Reason string `json:"reason" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "reason is required"})
+		return
+	}
+
+	txErr := h.db.Transaction(func(tx *gorm.DB) error {
+		// 1. Load and guard
+		var app models.TeamApplication
+		if err := tx.First(&app, appID).Error; err != nil {
+			return err
+		}
+		if app.Status != models.TeamApplicationPending {
+			return errors.New("application is not pending")
+		}
+
+		// 2. Reject with reason
+		now := time.Now()
+		if err := tx.Model(&app).Updates(map[string]any{
+			"status":           models.TeamApplicationRejected,
+			"reviewed_by_id":   adminID,
+			"rejection_reason": body.Reason,
+			"updated_at":       now,
+		}).Error; err != nil {
+			return err
+		}
+
+		// 3. Write admin log
+		targetUser := app.AppliedByID
+		reason := body.Reason
+		log := models.AdminLog{
+			AdminID:      adminID,
+			ActionType:   models.AdminActionRejectTeam,
+			Reason:       &reason,
+			TargetUserID: &targetUser,
+		}
+		return tx.Create(&log).Error
+	})
+
+	if txErr != nil {
+		if txErr.Error() == "application is not pending" {
+			c.JSON(http.StatusConflict, gin.H{"error": txErr.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": txErr.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Application rejected"})
 }
