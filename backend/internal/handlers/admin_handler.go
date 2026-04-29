@@ -144,64 +144,99 @@ func (h *AdminHandler) GetPlatformStats(c *gin.Context) {
 	stats := platformStats{}
 
 	// Total users (not banned, not deleted)
-	h.db.Raw(`
+	err := h.db.Raw(`
 		SELECT COUNT(*) FROM users WHERE is_banned = FALSE AND deleted_at IS NULL
-	`).Scan(&stats.TotalUsers)
+	`).Scan(&stats.TotalUsers).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	// Total teams (approved)
-	h.db.Raw(`
-		SELECT COUNT(*) FROM teams WHERE is_approved = TRUE
-	`).Scan(&stats.TotalTeams)
+	err = h.db.Raw(`
+		SELECT COUNT(*) FROM teams
+	`).Scan(&stats.TotalTeams).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	// Total manga
-	h.db.Raw(`
-		SELECT COUNT(*) FROM mangas WHERE deleted_at IS NULL
-	`).Scan(&stats.TotalManga)
+	err = h.db.Raw(`
+		SELECT COUNT(*) FROM mangas
+	`).Scan(&stats.TotalManga).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	// Total chapters
-	h.db.Raw(`
-		SELECT COUNT(*) FROM chapters WHERE deleted_at IS NULL
-	`).Scan(&stats.TotalChapters)
+	err = h.db.Raw(`
+		SELECT COUNT(*) FROM chapters
+	`).Scan(&stats.TotalChapters).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	// Total pages (sum of page_count in chapters)
-	h.db.Raw(`
-		SELECT COALESCE(SUM(page_count), 0) FROM chapters WHERE deleted_at IS NULL
-	`).Scan(&stats.TotalPages)
+	err = h.db.Raw(`
+		SELECT COALESCE(SUM(array_length(string_to_array(pages_url, ','), 1)), 0) FROM chapters
+	`).Scan(&stats.TotalPages).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	// New users this week
-	h.db.Raw(`
+	err = h.db.Raw(`
 		SELECT COUNT(*) FROM users
 		WHERE created_at > NOW() - INTERVAL '7 days'
 		AND is_banned = FALSE AND deleted_at IS NULL
-	`).Scan(&stats.NewUsersThisWeek)
+	`).Scan(&stats.NewUsersThisWeek).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	// New manga this month
-	h.db.Raw(`
+	err = h.db.Raw(`
 		SELECT COUNT(*) FROM mangas
 		WHERE created_at > NOW() - INTERVAL '30 days'
-		AND deleted_at IS NULL
-	`).Scan(&stats.NewMangaThisMonth)
+	`).Scan(&stats.NewMangaThisMonth).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	// Calculate users growth percentage
 	var lastWeekCount int
-	h.db.Raw(`
+	err = h.db.Raw(`
 		SELECT COUNT(*) FROM users
 		WHERE created_at > NOW() - INTERVAL '14 days'
 		AND created_at <= NOW() - INTERVAL '7 days'
 		AND is_banned = FALSE AND deleted_at IS NULL
-	`).Scan(&lastWeekCount)
+	`).Scan(&lastWeekCount).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
 	if lastWeekCount > 0 {
 		stats.UsersGrowthPercent = (stats.NewUsersThisWeek * 100) / lastWeekCount
 	}
 
 	// Calculate manga growth percentage
 	var lastMonthCount int
-	h.db.Raw(`
+	err = h.db.Raw(`
 		SELECT COUNT(*) FROM mangas
 		WHERE created_at > NOW() - INTERVAL '60 days'
 		AND created_at <= NOW() - INTERVAL '30 days'
-		AND deleted_at IS NULL
-	`).Scan(&lastMonthCount)
+	`).Scan(&lastMonthCount).Error
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	if lastMonthCount > 0 {
 		stats.MangaGrowthPercent = (stats.NewMangaThisMonth * 100) / lastMonthCount
 	}
@@ -222,16 +257,34 @@ func (h *AdminHandler) GetGenreStats(c *gin.Context) {
 	}
 
 	rows, err := h.db.Raw(`
-		SELECT t.name, COUNT(umt.id) as count
-		FROM tags t
-		JOIN manga_tags mt ON mt.tag_id = t.id
-		JOIN user_manga_status ums ON ums.manga_id = mt.manga_id
-		JOIN user_manga_status_type umt ON umt.id = ums.status_id
-		GROUP BY t.id, t.name
-		ORDER BY count DESC
-		LIMIT 10
-	`).Rows()
+WITH tag_counts AS (
+  SELECT
+    t.id,
+    t.name_uk AS name,
+    COUNT(*) AS count
+  FROM tags t
+  -- WHERE category == 'genre'
+  JOIN manga_tags mt ON mt.tag_id = t.id
+  JOIN user_manga_statuses ums ON ums.manga_id = mt.manga_id
+  GROUP BY t.id, t.name_uk
+),
+ranked AS (
+  SELECT *,
+         ROW_NUMBER() OVER (ORDER BY count DESC) AS rn
+  FROM tag_counts
+)
+SELECT name, count
+FROM ranked
+WHERE rn <= 10
 
+UNION ALL
+
+SELECT 'other...' AS name, COALESCE(SUM(count), 0)
+FROM ranked
+WHERE rn > 10
+
+ORDER BY count DESC;
+	`).Rows()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -274,7 +327,6 @@ func (h *AdminHandler) GetRegistrationStats(c *gin.Context) {
 		GROUP BY TO_CHAR(created_at, 'YYYY-MM'), TO_CHAR(created_at, 'Mon')
 		ORDER BY MIN(created_at)
 	`).Rows()
-
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -318,13 +370,12 @@ func (h *AdminHandler) GetTeamStats(c *gin.Context) {
 			COUNT(c.id) as chapters_count,
 			COALESCE(SUM(c.view_count), 0) as total_views
 		FROM teams t
-		LEFT JOIN chapters c ON c.team_id = t.id AND c.deleted_at IS NULL
-		WHERE t.is_approved = TRUE
+		LEFT JOIN mangas m ON m.team_id = t.id
+		LEFT JOIN chapters c ON c.manga_id = m.id
 		GROUP BY t.id, t.name
 		ORDER BY chapters_count DESC, total_views DESC
 		LIMIT 10
 	`).Rows()
-
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

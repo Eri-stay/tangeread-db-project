@@ -1,6 +1,5 @@
 -- 009_reading_histories.sql
--- ReadingHistory table migration (composite primary key)
-
+-- ReadingHistories table migration (composite primary key)
 CREATE TABLE IF NOT EXISTS reading_histories (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     manga_id INTEGER NOT NULL REFERENCES mangas(id) ON DELETE CASCADE,
@@ -10,4 +9,5 @@ CREATE TABLE IF NOT EXISTS reading_histories (
 );
 
 CREATE INDEX idx_reading_histories_manga_id ON reading_histories(manga_id);
+
 CREATE INDEX idx_reading_histories_chapter_id ON reading_histories(chapter_id);

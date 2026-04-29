@@ -41,32 +41,7 @@ interface RegistrationStat {
   count: number;
 }
 
-const genreData: GenreData[] = [
-  { name: 'Фентезі', value: 2845, color: '#59631f' },
-  { name: 'Романтика', value: 2134, color: '#aeba68' },
-  { name: 'Бойовик', value: 1987, color: '#8b9456' },
-  { name: 'Драма', value: 1456, color: '#6b7542' },
-  { name: 'Комедія', value: 1234, color: '#4a5230' },
-  { name: 'Пригоди', value: 987, color: '#a3b060' },
-  { name: 'Інше', value: 543, color: '#c5d078' },
-];
 
-const registrationData = [
-  { month: 'Жовт', count: 342 },
-  { month: 'Лист', count: 489 },
-  { month: 'Груд', count: 567 },
-  { month: 'Січ', count: 723 },
-  { month: 'Лют', count: 891 },
-  { month: 'Берез', count: 1045 },
-];
-
-const topTeams: TeamRanking[] = [
-  { rank: 1, teamName: 'Dragon Scans Team', chaptersPublished: 45, totalViews: 123456, badge: 'gold' },
-  { rank: 2, teamName: 'Sakura Translation', chaptersPublished: 38, totalViews: 98234, badge: 'silver' },
-  { rank: 3, teamName: 'Moonlight Editors', chaptersPublished: 32, totalViews: 87123, badge: 'bronze' },
-  { rank: 4, teamName: 'Phoenix Rising', chaptersPublished: 28, totalViews: 76543 },
-  { rank: 5, teamName: 'Eastern Legends', chaptersPublished: 24, totalViews: 65432 },
-];
 
 const badgeColors = {
   gold: 'from-amber-400 to-yellow-600',
@@ -114,11 +89,9 @@ export function AdminDashboardPage() {
   }, [apiUrl]);
 
   const genreColors = ['#59631f', '#aeba68', '#8b9456', '#6b7542', '#4a5230', '#a3b060', '#c5d078'];
-  const displayGenreData = genreStats.length > 0
-    ? genreStats.map((g, i) => ({ ...g, color: genreColors[i % genreColors.length] }))
-    : genreData;
-  const displayRegistrationData = registrationStats.length > 0 ? registrationStats : registrationData;
-  const displayTeams = teamRankings.length > 0 ? teamRankings : topTeams;
+  const displayGenreData = genreStats.map((g, i) => ({ ...g, color: genreColors[i % genreColors.length] }));
+  const displayRegistrationData = registrationStats;
+  const displayTeams = teamRankings;
 
   const handleAdminAction = async (endpoint: string, method: string, setLoader: (v: boolean) => void) => {
     setLoader(true);
@@ -131,10 +104,10 @@ export function AdminDashboardPage() {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || data.error || 'Дія не вдалася');
-      
+
       setMessage({ text: data.message || 'Успішно виконано', type: 'success' });
       if (endpoint === 'seed' && method === 'DELETE') {
         // Maybe reload page or update stats?
@@ -177,7 +150,7 @@ export function AdminDashboardPage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-semibold mb-2">Аналітичний дашборд</h1>
-          
+
           <div className="h-px bg-gradient-to-r from-primary/50 via-primary/20 to-transparent mt-4" />
         </div>
 
@@ -212,10 +185,10 @@ export function AdminDashboardPage() {
           {/* Library Size */}
           <div className="bg-card border border-border rounded-lg p-6 hover:border-primary/50 transition-colors">
             <div className="flex items-start justify-between mb-4">
-            <div className="p-3 rounded-lg bg-[#aeba68]/20 inline-block mb-4">
-              <BookOpen className="h-6 w-6 text-[#aeba68]" />
-            </div>
-            <div className="flex items-center gap-1 text-xs font-medium text-red-400 bg-red-400/10 px-2 py-1 rounded">
+              <div className="p-3 rounded-lg bg-[#aeba68]/20 inline-block mb-4">
+                <BookOpen className="h-6 w-6 text-[#aeba68]" />
+              </div>
+              <div className="flex items-center gap-1 text-xs font-medium text-red-400 bg-red-400/10 px-2 py-1 rounded">
                 <TrendingDown className="h-3 w-3" />
                 {platformStats?.mangaGrowthPercent !== undefined && platformStats.mangaGrowthPercent !== 0
                   ? `${platformStats.mangaGrowthPercent > 0 ? '+' : ''}${platformStats.mangaGrowthPercent}%`
@@ -290,7 +263,7 @@ export function AdminDashboardPage() {
                       fill="#8884d8"
                       dataKey="value"
                     >
-                      {genreData.map((entry, index) => (
+                      {displayGenreData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
@@ -310,46 +283,52 @@ export function AdminDashboardPage() {
               </div>
             ) : (
               <div className="space-y-3 max-h-[320px] overflow-y-auto">
-                {genreData
-                  .sort((a, b) => b.value - a.value)
-                  .map((genre, index) => {
-                    const percentage = ((genre.value / totalGenreViews) * 100).toFixed(1);
-                    return (
-                      <div key={index} className="flex items-center gap-4">
-                        <div className="w-6 text-sm text-muted-foreground">#{index + 1}</div>
-                        <div
-                          className="w-3 h-3 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: genre.color }}
-                        />
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-sm">{genre.name}</span>
-                            <span className="text-sm text-muted-foreground">
-                              {genre.value.toLocaleString()}
-                            </span>
+                {displayGenreData.length > 0 ? (
+                  displayGenreData
+                    .sort((a, b) => b.value - a.value)
+                    .map((genre, index) => {
+                      const percentage = ((genre.value / totalGenreViews) * 100).toFixed(1);
+                      return (
+                        <div key={index} className="flex items-center gap-4">
+                          <div className="w-6 text-sm text-muted-foreground">#{index + 1}</div>
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: genre.color }}
+                          />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="font-medium text-sm">{genre.name}</span>
+                              <span className="text-sm text-muted-foreground">
+                                {genre.value.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="w-full bg-secondary rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className="h-full transition-all"
+                                style={{
+                                  width: `${percentage}%`,
+                                  backgroundColor: genre.color,
+                                }}
+                              />
+                            </div>
                           </div>
-                          <div className="w-full bg-secondary rounded-full h-1.5 overflow-hidden">
-                            <div
-                              className="h-full transition-all"
-                              style={{
-                                width: `${percentage}%`,
-                                backgroundColor: genre.color,
-                              }}
-                            />
-                          </div>
+                          <span
+                            className="text-xs font-medium px-2 py-1 rounded"
+                            style={{
+                              backgroundColor: `${genre.color}20`,
+                              color: genre.color,
+                            }}
+                          >
+                            {percentage}%
+                          </span>
                         </div>
-                        <span
-                          className="text-xs font-medium px-2 py-1 rounded"
-                          style={{
-                            backgroundColor: `${genre.color}20`,
-                            color: genre.color,
-                          }}
-                        >
-                          {percentage}%
-                        </span>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>Немає даних про жанри</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -363,29 +342,35 @@ export function AdminDashboardPage() {
               </p>
             </div>
 
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={displayRegistrationData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="month" stroke="#888" style={{ fontSize: '12px' }} />
-                <YAxis stroke="#888" style={{ fontSize: '12px' }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1a1a1a',
-                    border: '1px solid #333',
-                    borderRadius: '8px',
-                  }}
-                  formatter={(value: number) => [value.toLocaleString(), 'Реєстрацій']}
-                />
-                <Bar dataKey="count" radius={[6, 6, 0, 0]}>
-                  {registrationData.map((entry, index) => (
-                    <Cell
-                      key={`bar-cell-${entry.month}-${index}`}
-                      fill={`rgba(89, 99, 31, ${0.4 + (index / registrationData.length) * 0.6})`}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            {displayRegistrationData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={displayRegistrationData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                  <XAxis dataKey="month" stroke="#888" style={{ fontSize: '12px' }} />
+                  <YAxis stroke="#888" style={{ fontSize: '12px' }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1a1a1a',
+                      border: '1px solid #333',
+                      borderRadius: '8px',
+                    }}
+                    formatter={(value: number) => [value.toLocaleString(), 'Реєстрацій']}
+                  />
+                  <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                    {displayRegistrationData.map((entry, index) => (
+                      <Cell
+                        key={`bar-cell-${entry.month}-${index}`}
+                        fill={`rgba(89, 99, 31, ${0.4 + (index / displayRegistrationData.length) * 0.6})`}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <p>Немає даних про реєстрацію</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -399,56 +384,62 @@ export function AdminDashboardPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="border-b border-border bg-secondary/20">
-                <tr>
-                  <th className="text-center px-6 py-4 text-sm font-semibold text-muted-foreground w-20">
-                    Рейтинг
-                  </th>
-                  <th className="text-left px-6 py-4 text-sm font-semibold text-muted-foreground">
-                    Назва команди
-                  </th>
-                  <th className="text-center px-6 py-4 text-sm font-semibold text-muted-foreground">
-                    Опубліковано розділів
-                  </th>
-                  <th className="text-center px-6 py-4 text-sm font-semibold text-muted-foreground">
-                    Загальна к-ть переглядів
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {displayTeams.map((team) => (
-                  <tr key={team.rank} className="hover:bg-secondary/20 transition-colors">
-                    <td className="px-6 py-4 text-center">
-                      {team.badge ? (
-                        <div
-                          className={`inline-flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br ${badgeColors[team.badge]} text-white font-bold text-sm shadow-lg`}
-                        >
-                          {team.rank}
-                        </div>
-                      ) : (
-                        <span className="text-lg font-semibold text-muted-foreground">
-                          {team.rank}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-medium">{team.teamName}</span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="px-3 py-1 bg-[#59631f]/20 text-[#59631f] rounded-full text-sm font-medium">
-                        {team.chaptersPublished}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="px-3 py-1 bg-[#aeba68]/20 text-[#aeba68] rounded-full text-sm font-medium">
-                        {team.totalViews.toLocaleString()}
-                      </span>
-                    </td>
+            {displayTeams.length > 0 ? (
+              <table className="w-full">
+                <thead className="border-b border-border bg-secondary/20">
+                  <tr>
+                    <th className="text-center px-6 py-4 text-sm font-semibold text-muted-foreground w-20">
+                      Рейтинг
+                    </th>
+                    <th className="text-left px-6 py-4 text-sm font-semibold text-muted-foreground">
+                      Назва команди
+                    </th>
+                    <th className="text-center px-6 py-4 text-sm font-semibold text-muted-foreground">
+                      Опубліковано розділів
+                    </th>
+                    <th className="text-center px-6 py-4 text-sm font-semibold text-muted-foreground">
+                      Загальна к-ть переглядів
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {displayTeams.map((team) => (
+                    <tr key={team.rank} className="hover:bg-secondary/20 transition-colors">
+                      <td className="px-6 py-4 text-center">
+                        {team.badge ? (
+                          <div
+                            className={`inline-flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br ${badgeColors[team.badge]} text-white font-bold text-sm shadow-lg`}
+                          >
+                            {team.rank}
+                          </div>
+                        ) : (
+                          <span className="text-lg font-semibold text-muted-foreground">
+                            {team.rank}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="font-medium">{team.teamName}</span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="px-3 py-1 bg-[#59631f]/20 text-[#59631f] rounded-full text-sm font-medium">
+                          {team.chaptersPublished}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className="px-3 py-1 bg-[#aeba68]/20 text-[#aeba68] rounded-full text-sm font-medium">
+                          {team.totalViews.toLocaleString()}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="text-center py-12 text-muted-foreground">
+                <p>Немаєданих про команди</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -465,9 +456,8 @@ export function AdminDashboardPage() {
           </div>
 
           {message && (
-            <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
-              message.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-destructive/10 text-destructive border border-destructive/20'
-            }`}>
+            <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${message.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-destructive/10 text-destructive border border-destructive/20'
+              }`}>
               {message.type === 'success' ? <Shield className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
               <span className="text-sm font-medium">{message.text}</span>
             </div>
@@ -479,8 +469,8 @@ export function AdminDashboardPage() {
               <p className="text-sm text-muted-foreground mb-4">
                 Запускає скрипт seed.py для імпорту 200 манг та 1000 користувачів. Це може зайняти кілька хвилин.
               </p>
-              <Button 
-                onClick={() => handleAdminAction('seed', 'POST', setIsSeeding)} 
+              <Button
+                onClick={() => handleAdminAction('seed', 'POST', setIsSeeding)}
                 disabled={isSeeding || isDeleting}
                 className="w-full gap-2 bg-[#59631f] hover:bg-[#59631f]/90"
               >
@@ -494,7 +484,7 @@ export function AdminDashboardPage() {
               <p className="text-sm text-muted-foreground mb-4 text-destructive/70">
                 Очищує всі таблиці (манга, розділи, коментарі тощо), крім адмінів. Дія незворотна!
               </p>
-              <Button 
+              <Button
                 variant="outline"
                 onClick={() => {
                   if (window.confirm('Ви впевнені, що хочете видалити ВСІ дані (крім адмінів)?')) {

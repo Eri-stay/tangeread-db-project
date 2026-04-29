@@ -50,7 +50,7 @@ func (r *postgresMangaRepository) GetLatestUpdated(limit, offset int) ([]models.
 		}).
 		Where("mangas.display_status = ?", "active").
 		Where("chapters.display_status = ?", "active").
-		Group("mangas.id, stats.avg_rating, stats.chapter_count").
+		Group("mangas.id, mangas.title_ua, stats.avg_rating, stats.chapter_count").
 		Order("MAX(chapters.created_at) DESC").
 		Limit(limit).
 		Offset(offset).
@@ -78,7 +78,6 @@ func (r *postgresMangaRepository) GetByID(id uint) (*models.Manga, error) {
 			return db.Order("volume DESC, chapter_number DESC")
 		}).
 		First(&manga, id).Error
-
 	if err != nil {
 		return nil, err
 	}
