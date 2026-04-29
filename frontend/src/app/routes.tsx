@@ -15,6 +15,7 @@ import { ContentModerationPage } from './pages/ContentModerationPage';
 import { ModerationLogsPage } from './pages/ModerationLogsPage';
 import { TagManagementPage } from './pages/TagManagementPage';
 import { TeamApplicationsPage } from './pages/TeamApplicationsPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 import { Layout } from './components/Layout';
 
 export const createAppRouter = () => {
@@ -92,6 +93,10 @@ export const createAppRouter = () => {
         {
           path: '/admin/team-applications',
           element: <TeamApplicationsPage />,
+        },
+        {
+          path: '*',
+          element: <NotFoundPage />,
         },
       ],
     },

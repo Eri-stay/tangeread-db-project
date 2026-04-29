@@ -205,16 +205,16 @@ type Rating struct {
 }
 
 type Comment struct {
-	ID            uint `gorm:"primaryKey"`
-	UserID        *uint
-	User          *User
-	ChapterID     uint    `gorm:"not null"`
-	Chapter       Chapter `gorm:"constraint:OnDelete:CASCADE;"`
-	ParentID      *uint
-	Parent        *Comment
-	Content       string        `gorm:"type:text;not null"`
-	DisplayStatus DisplayStatus `gorm:"type:varchar(20);not null;default:'active'"`
-	CreatedAt     time.Time
+	ID            uint `gorm:"primaryKey" json:"id"`
+	UserID        *uint `json:"user_id"`
+	User          *User `json:"user"`
+	ChapterID     uint    `gorm:"not null" json:"chapter_id"`
+	Chapter       *Chapter `json:"chapter" gorm:"constraint:OnDelete:CASCADE;"`
+	ParentID      *uint `json:"parent_id"`
+	Parent        *Comment `json:"parent"`
+	Content       string        `gorm:"type:text;not null" json:"content"`
+	DisplayStatus DisplayStatus `gorm:"type:varchar(20);not null;default:'active'" json:"display_status"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 type AdminLog struct {

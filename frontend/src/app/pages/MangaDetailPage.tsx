@@ -553,8 +553,8 @@ export function MangaDetailPage() {
           </div>
         </div>
 
-        {/* Similar Manga Section - Using popular for now */}
-        <section>
+        {/* Similar Manga Section */}
+        <section className="mb-12">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-semibold flex items-center gap-2">
               Схожа манґа

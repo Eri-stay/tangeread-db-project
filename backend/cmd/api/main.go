@@ -40,11 +40,13 @@ func main() {
 	// 3. Initialize Repositories
 	userRepo := repositories.NewUserRepository(database.DB)
 	mangaRepo := repositories.NewMangaRepository(database.DB)
+	commentRepo := repositories.NewCommentRepository(database.DB)
 
 	// 4. Initialize Services
 	authService := services.NewAuthService(userRepo)
 	userService := services.NewUserService(userRepo)
 	mangaService := services.NewMangaService(mangaRepo)
+	commentService := services.NewCommentService(commentRepo)
 
 	// 5. Initialize S3 Storage
 	s3Bucket := os.Getenv("S3_BUCKET")
@@ -83,6 +85,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(userService, mediaStorage)
 	mangaHandler := handlers.NewMangaHandler(mangaService, userService, mediaStorage)
 	adminHandler := handlers.NewAdminHandler(database.DB, seedScript)
+	commentHandler := handlers.NewCommentHandler(commentService)
 
 	// 7. Setup Gin Router
 	r := gin.Default()
@@ -116,6 +119,8 @@ func main() {
 			manga.GET("/recommendations", mangaHandler.GetRecommendations)
 			manga.GET("/:id/similar", mangaHandler.GetSimilarManga)
 		}
+
+		api.GET("/chapters/:id/comments", commentHandler.GetChapterComments)
 
 		// Admin routes (JWT required + admin role check inside handler)
 		admin := api.Group("/admin")
@@ -158,6 +163,11 @@ func main() {
 			users.POST("/manga/:id/favorite", userHandler.ToggleFavorite)
 			users.POST("/manga/:id/status", userHandler.UpdateMangaStatus)
 			users.POST("/manga/:id/rate", userHandler.RateManga)
+			
+			// Comments
+			users.POST("/comments", commentHandler.AddComment)
+			users.DELETE("/comments/:id", commentHandler.DeleteComment)
+
 			users.GET("/team", userHandler.GetUserTeam)
 			users.POST("/team-application", userHandler.SubmitTeamApplication)
 			users.GET("/team-application", userHandler.GetMyTeamApplication)
