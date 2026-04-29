@@ -26,6 +26,7 @@ export function MangaDetailPage() {
   const [hoveredStar, setHoveredStar] = useState(0);
   const [bookmarkStatus, setBookmarkStatus] = useState<string | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [lastReadChapter, setLastReadChapter] = useState<number | null>(null);
   const [user, setUser] = useState<{username: string, role: string} | null>(null);
   const similarRef = useRef<HTMLDivElement>(null);
 
@@ -85,6 +86,21 @@ export function MangaDetailPage() {
           }));
           setTrending(mappedTrending);
         }
+
+        // Fetch user status if logged in
+        const token = localStorage.getItem('token');
+        if (token) {
+          const statusRes = await fetch(`${apiUrl}/users/manga/${id}/status`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (statusRes.ok) {
+            const statusJson = await statusRes.json();
+            setBookmarkStatus(statusJson.status || null);
+            setIsFavorite(statusJson.is_favorite || false);
+            setUserRating(statusJson.score || 0);
+            setLastReadChapter(statusJson.last_chapter || null);
+          }
+        }
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -139,19 +155,89 @@ export function MangaDetailPage() {
     }
   };
 
-  const handleFavorite = () => {
+  const handleFavorite = async () => {
     if (!user) {
       setShowLoginModal(true);
-    } else {
-      setIsFavorite(prev => !prev);
+      return;
+    }
+
+    const newFavorite = !isFavorite;
+    setIsFavorite(newFavorite);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/users/manga/${id}/favorite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ is_favorite: newFavorite })
+      });
+
+      if (!res.ok) throw new Error();
+    } catch (err) {
+      setIsFavorite(!newFavorite);
     }
   };
 
-  const handleRating = (rating: number) => {
+  const handleStatusChange = async (status: string) => {
     if (!user) {
       setShowLoginModal(true);
-    } else {
-      setUserRating(rating);
+      return;
+    }
+
+    const oldStatus = bookmarkStatus;
+    setBookmarkStatus(status);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/users/manga/${id}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status })
+      });
+
+      if (!res.ok) throw new Error();
+    } catch (err) {
+      setBookmarkStatus(oldStatus);
+    }
+  };
+
+  const handleRating = async (rating: number) => {
+    if (!user) {
+      setShowLoginModal(true);
+      return;
+    }
+
+    const oldRating = userRating;
+    setUserRating(rating);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/users/manga/${id}/rate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ score: rating })
+      });
+
+      if (!res.ok) throw new Error();
+      
+      // Refresh manga data to update average rating
+      const mangaRes = await fetch(`${apiUrl}/manga/${id}`);
+      if (mangaRes.ok) {
+        const mangaJson = await mangaRes.json();
+        const b = mangaJson.data;
+        setManga(prev => prev ? { ...prev, rating: b.avg_rating || 0 } : null);
+      }
+    } catch (err) {
+      setUserRating(oldRating);
     }
   };
 
@@ -206,6 +292,13 @@ export function MangaDetailPage() {
               <span className="mx-2">•</span>
               <span className="text-muted-foreground">Формат:</span>
               <span className="px-2 py-1 bg-secondary text-foreground rounded">{manga.format}</span>
+              {lastReadChapter !== null && lastReadChapter > 0 && (
+                <>
+                  <span className="mx-2">•</span>
+                  <span className="text-muted-foreground">Прочитано:</span>
+                  <span className="px-2 py-1 bg-[#aeba68]/20 text-[#aeba68] rounded font-medium">розділ {lastReadChapter}</span>
+                </>
+              )}
             </div>
 
             {/* Action Buttons */}
@@ -254,7 +347,7 @@ export function MangaDetailPage() {
                           if (!user) {
                             setShowLoginModal(true);
                           } else {
-                            setBookmarkStatus(option.value);
+                            handleStatusChange(option.value);
                           }
                         }}
                         className={`cursor-pointer hover:bg-secondary focus:bg-secondary transition-colors ${isActive ? 'bg-[#59631f]/20 text-[#59631f]' : ''}`}

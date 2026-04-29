@@ -11,6 +11,10 @@ type MangaService interface {
 	GetTrending(limit, offset int) ([]models.Manga, error)
 	GetMangaByID(id uint) (*models.Manga, error)
 	GetChapter(mangaID uint, chapterNum float64) (*models.Chapter, error)
+	GetAuthorProjects(authorID uint) ([]models.Manga, error)
+	CreateManga(manga *models.Manga, tagIDs []uint) error
+	UpdateManga(manga *models.Manga, tagIDs []uint) error
+	CreateChapter(chapter *models.Chapter) error
 }
 
 type mangaService struct {
@@ -39,4 +43,18 @@ func (s *mangaService) GetMangaByID(id uint) (*models.Manga, error) {
 
 func (s *mangaService) GetChapter(mangaID uint, chapterNum float64) (*models.Chapter, error) {
 	return s.mangaRepo.GetChapter(mangaID, chapterNum)
+}
+func (s *mangaService) GetAuthorProjects(authorID uint) ([]models.Manga, error) {
+	return s.mangaRepo.GetByAuthorID(authorID)
+}
+
+func (s *mangaService) CreateManga(manga *models.Manga, tagIDs []uint) error {
+	return s.mangaRepo.Create(manga, tagIDs)
+}
+func (s *mangaService) UpdateManga(manga *models.Manga, tagIDs []uint) error {
+	return s.mangaRepo.Update(manga, tagIDs)
+}
+
+func (s *mangaService) CreateChapter(chapter *models.Chapter) error {
+	return s.mangaRepo.CreateChapter(chapter)
 }

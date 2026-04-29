@@ -211,18 +211,20 @@ export function TeamDashboardPage() {
         <div className="mb-8">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h1 className="text-3xl font-semibold mb-2">Мої команди</h1>
+              <h1 className="text-3xl font-semibold mb-2">Моя команда</h1>
               <p className="text-muted-foreground">
-                Керуйте своїми перекладацькими командами
+                Керуйте своєю перекладацькою командою
               </p>
             </div>
-            <Button 
-              onClick={handleOpenApplicationModal}
-              className="bg-[#59631f] hover:bg-[#59631f]/90 gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Подати заявку на створення команди
-            </Button>
+            {!teamMembers.some(m => m.id === currentUser.id) && (
+              <Button 
+                onClick={handleOpenApplicationModal}
+                className="bg-[#59631f] hover:bg-[#59631f]/90 gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                Подати заявку на створення команди
+              </Button>
+            )}
           </div>
           <div className="h-px bg-gradient-to-r from-primary/50 via-primary/20 to-transparent" />
         </div>
