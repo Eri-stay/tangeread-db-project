@@ -14,7 +14,11 @@ type UserService interface {
 	UpdateProfile(userID uint, username string, avatarURL *string) (*models.User, error)
 	SoftDeleteAccount(userID uint) error
 	GetBookmarks(userID uint, limit, offset int) (map[string][]models.BookmarkDTO, map[string]int, error)
-	GetHistory(userID uint, limit, offset int) ([]models.HistoryDTO, error)
+	GetHistory(userID uint, limit, offset int) ([]models.HistoryDTO, int64, error)
+	GetMangaUserStatus(userID, mangaID uint) (status string, isFavorite bool, score int, lastChapter float64, err error)
+	SetFavorite(userID, mangaID uint, isFavorite bool) error
+	SetMangaStatus(userID, mangaID uint, status string) error
+	RateManga(userID, mangaID uint, score int) error
 }
 
 type userService struct {
@@ -111,16 +115,37 @@ func (s *userService) GetBookmarks(userID uint, limit, offset int) (map[string][
 	return result, counts, nil
 }
 
-func (s *userService) GetHistory(userID uint, limit, offset int) ([]models.HistoryDTO, error) {
+func (s *userService) GetHistory(userID uint, limit, offset int) ([]models.HistoryDTO, int64, error) {
 	historyList, err := s.userRepo.GetHistory(userID, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+
+	totalCount, err := s.userRepo.GetHistoryCount(userID)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	loc, _ := time.LoadLocation("Europe/Kiev")
 	for i := range historyList {
 		historyList[i].TimeAgo = timeago.English.Format(historyList[i].UpdatedAt.In(loc))
-		}
+	}
 
-        return historyList, nil
+	return historyList, totalCount, nil
+}
+
+func (s *userService) GetMangaUserStatus(userID, mangaID uint) (string, bool, int, float64, error) {
+	return s.userRepo.GetMangaUserStatus(userID, mangaID)
+}
+
+func (s *userService) SetFavorite(userID, mangaID uint, isFavorite bool) error {
+	return s.userRepo.SetFavorite(userID, mangaID, isFavorite)
+}
+
+func (s *userService) SetMangaStatus(userID, mangaID uint, status string) error {
+	return s.userRepo.SetMangaStatus(userID, mangaID, status)
+}
+
+func (s *userService) RateManga(userID, mangaID uint, score int) error {
+	return s.userRepo.RateManga(userID, mangaID, score)
 }

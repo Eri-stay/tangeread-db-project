@@ -6,13 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"gorm.io/gorm"
 
 	"github.com/eri-stay/tangeread-db-project/backend/internal/database"
 	"github.com/eri-stay/tangeread-db-project/backend/internal/handlers"
@@ -23,22 +21,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
-
-func startBackgroundTasks(db *gorm.DB) {
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				if err := db.Exec("REFRESH MATERIALIZED VIEW CONCURRENTLY manga_stats_mv").Error; err != nil {
-					log.Printf("Background: Failed to refresh manga_stats_mv: %v", err)
-				}
-			}
-		}
-	}()
-}
 
 func main() {
 	// 1. Load environment variables
@@ -54,9 +36,6 @@ func main() {
 
 	// 2. Initialize Database and run migrations
 	database.InitDB(dsn)
-
-	// Start background workers
-	startBackgroundTasks(database.DB)
 
 	// 3. Initialize Repositories
 	userRepo := repositories.NewUserRepository(database.DB)
@@ -102,7 +81,7 @@ func main() {
 
 	authHandler := handlers.NewAuthHandler(authService)
 	userHandler := handlers.NewUserHandler(userService, mediaStorage)
-	mangaHandler := handlers.NewMangaHandler(mangaService)
+	mangaHandler := handlers.NewMangaHandler(mangaService, mediaStorage)
 	adminHandler := handlers.NewAdminHandler(database.DB, seedScript)
 
 	// 7. Setup Gin Router
@@ -131,6 +110,7 @@ func main() {
 			manga.GET("/trending", mangaHandler.GetTrending)
 			manga.GET("/:id", mangaHandler.GetMangaByID)
 			manga.GET("/:id/chapters/:number", mangaHandler.GetChapter)
+			manga.GET("/tags/all", mangaHandler.GetTags)
 		}
 
 		// Admin routes (JWT required + admin role check inside handler)
@@ -139,6 +119,18 @@ func main() {
 		{
 			admin.POST("/seed", adminHandler.RunSeed)
 			admin.DELETE("/seed", adminHandler.DeleteSeed)
+		}
+
+		// Author routes
+		author := api.Group("/author")
+		author.Use(handlers.JWTMiddleware())
+		{
+			author.GET("/projects", mangaHandler.GetAuthorProjects)
+			author.POST("/manga", mangaHandler.CreateManga)
+			author.PUT("/manga/:id", mangaHandler.UpdateManga)
+			author.POST("/manga/cover/upload", mangaHandler.UploadCover)
+			author.POST("/chapter", mangaHandler.CreateChapter)
+			author.POST("/chapter/pages/upload", mangaHandler.UploadChapterPages)
 		}
 
 		// Protected routes
@@ -151,6 +143,11 @@ func main() {
 			users.GET("/history", userHandler.GetHistory)
 			users.POST("/avatar", userHandler.UploadAvatar)
 			users.DELETE("/account", userHandler.SoftDeleteAccount)
+			users.GET("/manga/:id/status", userHandler.GetMangaUserStatus)
+			users.POST("/manga/:id/favorite", userHandler.ToggleFavorite)
+			users.POST("/manga/:id/status", userHandler.UpdateMangaStatus)
+			users.POST("/manga/:id/rate", userHandler.RateManga)
+			users.GET("/team", userHandler.GetUserTeam)
 		}
 	}
 

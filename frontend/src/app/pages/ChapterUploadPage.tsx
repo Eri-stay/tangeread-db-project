@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Upload, GripVertical, X, Eye } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router';
+import { Upload, GripVertical, X, Eye, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -12,12 +13,19 @@ interface PageImage {
   order: number;
 }
 
+const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
+
 export function ChapterUploadPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
   const [volume, setVolume] = useState('');
   const [chapterNumber, setChapterNumber] = useState('');
   const [chapterTitle, setChapterTitle] = useState('');
   const [pages, setPages] = useState<PageImage[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
   const handleFileUpload = (files: FileList | null) => {
     if (!files) return;
@@ -86,8 +94,65 @@ export function ChapterUploadPage() {
     });
   };
 
-  const handlePublish = () => {
-    console.log('Publishing chapter...', { volume, chapterNumber, chapterTitle, pages });
+  const handlePublish = async () => {
+    if (!chapterNumber || pages.length === 0) return;
+    
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) throw new Error('Unauthorized');
+
+      // 1. Upload pages
+      const formData = new FormData();
+      formData.append('manga_id', id || '');
+      formData.append('chapter_number', chapterNumber);
+      pages.forEach(p => {
+        formData.append('pages', p.file);
+      });
+
+      const uploadRes = await fetch(`${apiUrl}/author/chapter/pages/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        const errData = await uploadRes.json();
+        throw new Error(errData.error || 'Failed to upload pages');
+      }
+
+      const { urls } = await uploadRes.json();
+
+      // 2. Create chapter record
+      const chapterRes = await fetch(`${apiUrl}/author/chapter`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          manga_id: parseInt(id || '0'),
+          volume: volume ? parseInt(volume) : null,
+          chapter_number: parseFloat(chapterNumber),
+          title: chapterTitle,
+          pages_url: JSON.stringify(urls),
+        }),
+      });
+
+      if (!chapterRes.ok) {
+        const errData = await chapterRes.json();
+        throw new Error(errData.error || 'Failed to create chapter');
+      }
+
+      // Success! Navigate back to manga projects or detail
+      navigate(`/author/projects`);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handlePreview = () => {
@@ -105,6 +170,12 @@ export function ChapterUploadPage() {
           </p>
           <div className="h-px bg-gradient-to-r from-primary/50 via-primary/20 to-transparent mt-4" />
         </div>
+
+        {error && (
+          <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
 
         {/* Chapter Info Form */}
         <div className="bg-card border border-border rounded-lg p-6 mb-6">
@@ -298,9 +369,16 @@ export function ChapterUploadPage() {
               <Button
                 onClick={handlePublish}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground px-8"
-                disabled={!chapterNumber || pages.length === 0}
+                disabled={!chapterNumber || pages.length === 0 || isSubmitting}
               >
-                Опублікувати розділ
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Публікація...
+                  </>
+                ) : (
+                  'Опублікувати розділ'
+                )}
               </Button>
             </div>
           </div>

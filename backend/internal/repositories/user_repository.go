@@ -18,6 +18,11 @@ type UserRepository interface {
 	GetBookmarks(userID uint, limit, offset int) ([]models.BookmarkDTO, error)
 	GetBookmarkCounts(userID uint) (map[string]int, error)
 	GetHistory(userID uint, limit, offset int) ([]models.HistoryDTO, error)
+	GetHistoryCount(userID uint) (int64, error)
+	GetMangaUserStatus(userID, mangaID uint) (status string, isFavorite bool, score int, lastChapter float64, err error)
+	SetFavorite(userID, mangaID uint, isFavorite bool) error
+	SetMangaStatus(userID, mangaID uint, status string) error
+	RateManga(userID, mangaID uint, score int) error
 }
 
 type postgresUserRepository struct {
@@ -136,4 +141,87 @@ LIMIT ? OFFSET ?
 `
 	err := r.db.Raw(query, userID, limit, offset).Scan(&history).Error
 	return history, err
+}
+
+func (r *postgresUserRepository) GetHistoryCount(userID uint) (int64, error) {
+	var count int64
+	err := r.db.Table("reading_histories").Where("user_id = ?", userID).Count(&count).Error
+	return count, err
+}
+
+func (r *postgresUserRepository) GetMangaUserStatus(userID, mangaID uint) (string, bool, int, float64, error) {
+	var userStatus models.UserMangaStatus
+	err := r.db.Where("user_id = ? AND manga_id = ?", userID, mangaID).First(&userStatus).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", false, 0, 0, err
+	}
+
+	var rating models.Rating
+	errRating := r.db.Where("user_id = ? AND manga_id = ?", userID, mangaID).First(&rating).Error
+	if errRating != nil && !errors.Is(errRating, gorm.ErrRecordNotFound) {
+		return string(userStatus.Status), userStatus.IsFavorite, 0, 0, errRating
+	}
+
+	var lastChapter float64
+	query := `
+		SELECT c.chapter_number 
+		FROM reading_histories rh
+		JOIN chapters c ON rh.chapter_id = c.id
+		WHERE rh.user_id = ? AND rh.manga_id = ?
+	`
+	r.db.Raw(query, userID, mangaID).Scan(&lastChapter)
+
+	return string(userStatus.Status), userStatus.IsFavorite, rating.Score, lastChapter, nil
+}
+func (r *postgresUserRepository) SetFavorite(userID, mangaID uint, isFavorite bool) error {
+	var status models.UserMangaStatus
+	err := r.db.Where("user_id = ? AND manga_id = ?", userID, mangaID).First(&status).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			status = models.UserMangaStatus{
+				UserID:     userID,
+				MangaID:    mangaID,
+				Status:     models.ListStatusPlanned,
+				IsFavorite: isFavorite,
+			}
+			return r.db.Create(&status).Error
+		}
+		return err
+	}
+	return r.db.Model(&status).Update("is_favorite", isFavorite).Error
+}
+
+func (r *postgresUserRepository) SetMangaStatus(userID, mangaID uint, status string) error {
+	var userStatus models.UserMangaStatus
+	err := r.db.Where("user_id = ? AND manga_id = ?", userID, mangaID).First(&userStatus).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			userStatus = models.UserMangaStatus{
+				UserID:     userID,
+				MangaID:    mangaID,
+				Status:     models.ListStatus(status),
+				IsFavorite: false,
+			}
+			return r.db.Create(&userStatus).Error
+		}
+		return err
+	}
+	return r.db.Model(&userStatus).Update("status", status).Error
+}
+
+func (r *postgresUserRepository) RateManga(userID, mangaID uint, score int) error {
+	var rating models.Rating
+	err := r.db.Where("user_id = ? AND manga_id = ?", userID, mangaID).First(&rating).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			rating = models.Rating{
+				UserID:  userID,
+				MangaID: mangaID,
+				Score:   score,
+			}
+			return r.db.Create(&rating).Error
+		}
+		return err
+	}
+	return r.db.Model(&rating).Update("score", score).Error
 }

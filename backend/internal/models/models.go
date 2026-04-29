@@ -127,8 +127,8 @@ type TeamApplication struct {
 }
 
 type TeamMember struct {
-	UserID       uint         `gorm:"primaryKey"`
-	TeamID       uint         `gorm:"primaryKey"`
+	UserID       uint         `gorm:"primaryKey;autoIncrement:false"`
+	TeamID       uint         `gorm:"not null"`
 	InternalRole InternalRole `gorm:"type:varchar(20);not null"`
 	User         User
 	Team         Team
@@ -155,9 +155,9 @@ type Manga struct {
 }
 
 type Tag struct {
-	ID     uint   `gorm:"primaryKey"`
-	NameUk string `gorm:"uniqueIndex;not null"`
-	NameEn string `gorm:"uniqueIndex;not null"`
+	ID     uint   `gorm:"primaryKey" json:"id"`
+	NameUk string `gorm:"uniqueIndex;not null" json:"name_uk"`
+	NameEn string `gorm:"uniqueIndex;not null" json:"name_en"`
 }
 
 type Chapter struct {

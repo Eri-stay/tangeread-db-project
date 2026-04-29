@@ -11,6 +11,10 @@ type MangaRepository interface {
 	GetTrending(limit, offset int) ([]models.Manga, error)
 	GetByID(id uint) (*models.Manga, error)
 	GetChapter(mangaID uint, chapterNum float64) (*models.Chapter, error)
+	GetByAuthorID(authorID uint) ([]models.Manga, error)
+	Create(manga *models.Manga, tagIDs []uint) error
+	Update(manga *models.Manga, tagIDs []uint) error
+	CreateChapter(chapter *models.Chapter) error
 }
 
 type postgresMangaRepository struct {
@@ -103,4 +107,59 @@ func (r *postgresMangaRepository) GetTrending(limit, offset int) ([]models.Manga
 		Find(&mangas).Error
 
 	return mangas, err
+}
+func (r *postgresMangaRepository) GetByAuthorID(authorID uint) ([]models.Manga, error) {
+	var mangas []models.Manga
+	err := r.db.Table("mangas").
+		Select("mangas.*, COALESCE(stats.avg_rating, 0) as avg_rating, COALESCE(stats.chapter_count, 0) as chapters_count").
+		Joins("LEFT JOIN manga_stats_mv stats ON stats.manga_id = mangas.id").
+		Joins("JOIN team_members tm ON mangas.team_id = tm.team_id").
+		Where("tm.user_id = ?", authorID).
+		Preload("Tags").
+		Order("mangas.created_at DESC").
+		Find(&mangas).Error
+	return mangas, err
+}
+
+func (r *postgresMangaRepository) Create(manga *models.Manga, tagIDs []uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(manga).Error; err != nil {
+			return err
+		}
+
+		if len(tagIDs) > 0 {
+			var tags []models.Tag
+			if err := tx.Where("id IN ?", tagIDs).Find(&tags).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(manga).Association("Tags").Replace(tags); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+func (r *postgresMangaRepository) Update(manga *models.Manga, tagIDs []uint) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Omit("Tags").Save(manga).Error; err != nil {
+			return err
+		}
+
+		var tags []models.Tag
+		if len(tagIDs) > 0 {
+			if err := tx.Where("id IN ?", tagIDs).Find(&tags).Error; err != nil {
+				return err
+			}
+		}
+		
+		if err := tx.Model(manga).Association("Tags").Replace(tags); err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+func (r *postgresMangaRepository) CreateChapter(chapter *models.Chapter) error {
+	return r.db.Create(chapter).Error
 }

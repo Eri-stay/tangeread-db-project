@@ -19,7 +19,7 @@ DB_CONFIG = {
 }
 
 ANILIST_URL = 'https://graphql.anilist.co'
-DEFAULT_PASSWORD_HASH = "$2a$10$vI8aWBnW3fID.ZQ4/zo1G.q1lRps.9cGLcZEiGDMVr5yUP1KUOYTa"
+DEFAULT_PASSWORD_HASH = "$2a$12$qjeE1mpd90rlriFOiQmsFe1Jv.MbPAQa5c9L8Vrhcgc0gmTy8azlS"
 
 translator = GoogleTranslator(source='auto', target='uk')
 translation_cache = {}

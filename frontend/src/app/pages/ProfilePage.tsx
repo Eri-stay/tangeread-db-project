@@ -178,9 +178,8 @@ export function ProfilePage() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyOffset, setHistoryOffset] = useState(0);
   const [bookmarksOffset, setBookmarksOffset] = useState(0);
-  const [hasMoreHistory, setHasMoreHistory] = useState(true);
-  const [hasMoreBookmarks, setHasMoreBookmarks] = useState(true);
-  const LIMIT = 20;
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const LIMIT = 10; // Use smaller limit for better pagination visibility
 
   const apiUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8080/api';
 
@@ -202,11 +201,13 @@ export function ProfilePage() {
         setEmail(data.email || "");
         setRole(data.role || "");
 
-        // Sync with localStorage for header
+        // Sync localStorage
         const userStr = localStorage.getItem('user');
         if (userStr) {
           const user = JSON.parse(userStr);
+          user.username = data.username;
           user.avatar_url = data.avatar_url;
+          user.role = data.role;
           localStorage.setItem('user', JSON.stringify(user));
           window.dispatchEvent(new Event("storage"));
         }
@@ -239,11 +240,10 @@ export function ProfilePage() {
           });
         } else {
           setBookmarks(bData);
+          setBookmarksOffset(offset);
         }
         
-        // Simple check if we got any data
         const totalFetched = Object.values(bData).reduce((acc: number, val: any) => acc + (val?.length || 0), 0);
-        setHasMoreBookmarks(totalFetched === LIMIT);
       }
     } catch (e) { console.error(e); }
   };
@@ -255,13 +255,10 @@ export function ProfilePage() {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (hRes.ok) {
-        const hData = await hRes.json();
-        if (append) {
-          setHistory(prev => [...prev, ...(hData || [])]);
-        } else {
-          setHistory(hData || []);
-        }
-        setHasMoreHistory((hData?.length || 0) === LIMIT);
+        const hJson = await hRes.json();
+        setHistory(hJson.data || []);
+        setHistoryTotal(hJson.total || 0);
+        setHistoryOffset(offset);
       }
     } catch (e) { console.error(e); }
   };
@@ -272,16 +269,12 @@ export function ProfilePage() {
     fetchHistory(0);
   }, [apiUrl]);
 
-  const handleLoadMoreHistory = () => {
-    const nextOffset = historyOffset + LIMIT;
-    setHistoryOffset(nextOffset);
-    fetchHistory(nextOffset, true);
+  const handlePageChangeHistory = (newPage: number) => {
+    fetchHistory(newPage * LIMIT);
   };
 
-  const handleLoadMoreBookmarks = () => {
-    const nextOffset = bookmarksOffset + LIMIT;
-    setBookmarksOffset(nextOffset);
-    fetchBookmarks(nextOffset, true);
+  const handlePageChangeBookmarks = (newPage: number) => {
+    fetchBookmarks(newPage * LIMIT);
   };
 
   const handleSaveNickname = async () => {
@@ -312,8 +305,9 @@ export function ProfilePage() {
       if (userStr) {
         const user = JSON.parse(userStr);
         user.username = data.user.username;
+        user.avatar_url = data.user.avatar_url;
         localStorage.setItem('user', JSON.stringify(user));
-        // Force refresh header (Optional: could also use a Context/Redux)
+        // Force refresh header
         window.dispatchEvent(new Event("storage"));
       }
 
@@ -407,10 +401,10 @@ export function ProfilePage() {
   const renderStars = (rating: number) => {
     return (
       <div className="flex gap-0.5">
-        {[1, 2, 3, 4, 5].map((star) => (
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
           <Star
             key={star}
-            className={`h-4 w-4 ${star <= rating
+            className={`h-3 w-3 ${star <= rating
               ? "fill-yellow-500 text-yellow-500"
               : "text-muted-foreground/30"
               }`}
@@ -582,9 +576,6 @@ export function ProfilePage() {
                           }`}
                       >
                         {categoryLabels[category]}
-                        <span className="ml-2 text-xs opacity-70">
-                          ({bookmarkCounts[category] || 0})
-                        </span>
                       </button>
                     ),
                   )}
@@ -690,15 +681,27 @@ export function ProfilePage() {
                     </div>
                   )}
 
-                  {hasMoreBookmarks && currentBookmarks.length > 0 && (
-                    <div className="flex justify-center pt-4">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={handleLoadMoreBookmarks}
-                        className="text-primary hover:bg-primary/10"
+                  {/* Pagination for Bookmarks */}
+                  {bookmarkCounts[bookmarkCategory] > LIMIT && (
+                    <div className="flex items-center justify-center gap-4 mt-8 pt-4 border-t border-border/50">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChangeBookmarks(Math.floor(bookmarksOffset / LIMIT) - 1)}
+                        disabled={bookmarksOffset === 0}
                       >
-                        Показати ще закладок
+                        Назад
+                      </Button>
+                      <span className="text-sm text-muted-foreground">
+                        Сторінка {Math.floor(bookmarksOffset / LIMIT) + 1} з {Math.ceil(bookmarkCounts[bookmarkCategory] / LIMIT)}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChangeBookmarks(Math.floor(bookmarksOffset / LIMIT) + 1)}
+                        disabled={bookmarksOffset + LIMIT >= bookmarkCounts[bookmarkCategory]}
+                      >
+                        Вперед
                       </Button>
                     </div>
                   )}
@@ -771,18 +774,30 @@ export function ProfilePage() {
                 </div>
               )}
 
-              {hasMoreHistory && history.length > 0 && (
-                <div className="p-4 flex justify-center border-t border-border">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={handleLoadMoreHistory}
-                    className="text-primary hover:bg-primary/10"
-                  >
-                    Завантажити давнішу історію
-                  </Button>
-                </div>
-              )}
+                {/* Pagination for History */}
+                {historyTotal > LIMIT && (
+                  <div className="p-4 flex items-center justify-center gap-4 border-t border-border">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChangeHistory(Math.floor(historyOffset / LIMIT) - 1)}
+                      disabled={historyOffset === 0}
+                    >
+                      Назад
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Сторінка {Math.floor(historyOffset / LIMIT) + 1} з {Math.ceil(historyTotal / LIMIT)}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChangeHistory(Math.floor(historyOffset / LIMIT) + 1)}
+                      disabled={historyOffset + LIMIT >= historyTotal}
+                    >
+                      Вперед
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </TabsContent>
