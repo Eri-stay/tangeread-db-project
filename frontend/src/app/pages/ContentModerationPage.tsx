@@ -105,30 +105,51 @@ export function ContentModerationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [hideMangaModalOpen, setHideMangaModalOpen] = useState(false);
   const [selectedManga, setSelectedManga] = useState<any | null>(null);
+
+  const [mangaPage, setMangaPage] = useState(1);
+  const [mangaTotalPages, setMangaTotalPages] = useState(1);
+  const [commentPage, setCommentPage] = useState(1);
+  const [commentTotalPages, setCommentTotalPages] = useState(1);
+  const itemsPerPage = 10;
+
   const navigate = useNavigate();
 
   const userStr = localStorage.getItem('user');
   const currentUser = userStr ? JSON.parse(userStr) : null;
   const token = localStorage.getItem('token');
 
+  const userRole = currentUser?.role || '';
+
   // Role check: Only moderators and admins allowed
   useEffect(() => {
-    if (!currentUser || (currentUser.role !== 'moderator' && currentUser.role !== 'admin')) {
+    if (!userRole || (userRole !== 'moderator' && userRole !== 'admin')) {
       navigate('/');
-    } else {
+    }
+  }, [userRole, navigate]);
+
+  useEffect(() => {
+    if (userRole === 'moderator' || userRole === 'admin') {
       fetchManga();
+    }
+  }, [mangaPage, mangaSearch]);
+
+  useEffect(() => {
+    if (userRole === 'moderator' || userRole === 'admin') {
       fetchComments();
     }
-  }, [currentUser, navigate]);
+  }, [commentPage]);
 
   const fetchManga = async () => {
     try {
-      const response = await fetch(`${apiUrl}/moderation/manga`, {
+      const response = await fetch(`${apiUrl}/moderation/manga?page=${mangaPage}&limit=${itemsPerPage}&search=${encodeURIComponent(mangaSearch)}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const json = await response.json();
         setMangaList(json.data || []);
+        if (json.meta) {
+          setMangaTotalPages(Math.ceil(json.meta.total / itemsPerPage));
+        }
       }
     } catch (err) {
       console.error('Failed to fetch manga:', err);
@@ -139,22 +160,22 @@ export function ContentModerationPage() {
 
   const fetchComments = async () => {
     try {
-      const response = await fetch(`${apiUrl}/moderation/comments`, {
+      const response = await fetch(`${apiUrl}/moderation/comments?page=${commentPage}&limit=${itemsPerPage}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
         const json = await response.json();
         setComments(json.data || []);
+        if (json.meta) {
+          setCommentTotalPages(Math.ceil(json.meta.total / itemsPerPage));
+        }
       }
     } catch (err) {
       console.error('Failed to fetch comments:', err);
     }
   };
 
-  const filteredManga = mangaList.filter((manga) =>
-    manga.title_ua.toLowerCase().includes(mangaSearch.toLowerCase()) ||
-    manga.title_orig?.toLowerCase().includes(mangaSearch.toLowerCase())
-  );
+
 
   const handleToggleMangaVisibility = async (mangaId: number) => {
     const manga = mangaList.find(m => m.id === mangaId);
@@ -277,7 +298,7 @@ export function ContentModerationPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {filteredManga.map((manga) => (
+                    {mangaList.map((manga) => (
                       <tr
                         key={manga.id}
                         className={`hover:bg-secondary/20 transition-colors ${manga.display_status === 'hidden_by_mod' ? 'opacity-60 bg-destructive/5' : ''
@@ -339,6 +360,29 @@ export function ContentModerationPage() {
                 </table>
               </div>
             </div>
+            {mangaTotalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={mangaPage === 1}
+                  onClick={() => setMangaPage(prev => Math.max(1, prev - 1))}
+                >
+                  Попередня
+                </Button>
+                <span className="text-sm">
+                  Сторінка {mangaPage} з {mangaTotalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={mangaPage === mangaTotalPages}
+                  onClick={() => setMangaPage(prev => Math.min(mangaTotalPages, prev + 1))}
+                >
+                  Наступна
+                </Button>
+              </div>
+            )}
           </TabsContent>
 
           {/* Comment Moderation Tab */}
@@ -411,6 +455,30 @@ export function ContentModerationPage() {
                     </div>
                   </div>
                 ))}
+                {/* Comments Pagination */}
+                {commentTotalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-6">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={commentPage === 1}
+                      onClick={() => setCommentPage(prev => Math.max(1, prev - 1))}
+                    >
+                      Попередня
+                    </Button>
+                    <span className="text-sm">
+                      Сторінка {commentPage} з {commentTotalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={commentPage === commentTotalPages}
+                      onClick={() => setCommentPage(prev => Math.min(commentTotalPages, prev + 1))}
+                    >
+                      Наступна
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </TabsContent>

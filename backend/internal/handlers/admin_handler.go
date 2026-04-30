@@ -27,9 +27,6 @@ func NewAdminHandler(db *gorm.DB, seedScript string) *AdminHandler {
 // RunSeed — POST /api/admin/seed  (admin only)
 // Runs seed.py using the system Python interpreter.
 func (h *AdminHandler) RunSeed(c *gin.Context) {
-	if err := h.checkAdmin(c); err != nil {
-		return
-	}
 
 	interpreters := []string{"python", "py", "python3"}
 	if runtime.GOOS != "windows" {
@@ -76,9 +73,6 @@ func (h *AdminHandler) RunSeed(c *gin.Context) {
 // DeleteSeed — DELETE /api/admin/seed  (admin only)
 // Truncates all data tables (except users with role admin/moderator).
 func (h *AdminHandler) DeleteSeed(c *gin.Context) {
-	if err := h.checkAdmin(c); err != nil {
-		return
-	}
 
 	tables := []string{
 		"admin_logs",
@@ -129,9 +123,6 @@ func (h *AdminHandler) checkAdmin(c *gin.Context) error {
 // GetPlatformStats — GET /api/admin/stats  (admin only)
 // Returns general platform statistics.
 func (h *AdminHandler) GetPlatformStats(c *gin.Context) {
-	if err := h.checkAdmin(c); err != nil {
-		return
-	}
 
 	type platformStats struct {
 		TotalUsers         int `json:"totalUsers"`
@@ -251,9 +242,6 @@ func (h *AdminHandler) GetPlatformStats(c *gin.Context) {
 // GetGenreStats — GET /api/admin/genre-stats  (admin only)
 // Returns genre popularity based on bookmarks/statuses.
 func (h *AdminHandler) GetGenreStats(c *gin.Context) {
-	if err := h.checkAdmin(c); err != nil {
-		return
-	}
 
 	type genreStat struct {
 		Name  string `json:"name"`
@@ -301,9 +289,6 @@ ORDER BY count DESC, name ASC;
 // GetRegistrationStats — GET /api/admin/registration-stats  (admin only)
 // Returns user registration counts by month.
 func (h *AdminHandler) GetRegistrationStats(c *gin.Context) {
-	if err := h.checkAdmin(c); err != nil {
-		return
-	}
 
 	type regStat struct {
 		Month string `json:"month"`
@@ -343,9 +328,6 @@ func (h *AdminHandler) GetRegistrationStats(c *gin.Context) {
 // GetTeamStats — GET /api/admin/team-stats  (admin only)
 // Returns team rankings by chapters and views.
 func (h *AdminHandler) GetTeamStats(c *gin.Context) {
-	if err := h.checkAdmin(c); err != nil {
-		return
-	}
 
 	type teamStat struct {
 		Rank              int    `json:"rank"`
@@ -407,9 +389,6 @@ func (h *AdminHandler) GetTeamStats(c *gin.Context) {
 // GetTeamApplications — GET /api/admin/team-applications  (admin only)
 // Returns a list of all team applications, with optional ?status= filter.
 func (h *AdminHandler) GetTeamApplications(c *gin.Context) {
-	if err := h.checkAdmin(c); err != nil {
-		return
-	}
 
 	status := c.Query("status") // empty = all
 
@@ -443,9 +422,6 @@ func (h *AdminHandler) GetTeamApplications(c *gin.Context) {
 // Atomically: approves the application, creates the team, adds applicant as leader,
 // promotes the applicant to 'author' role, and writes an admin log entry.
 func (h *AdminHandler) ApproveTeamApplication(c *gin.Context) {
-	if err := h.checkAdmin(c); err != nil {
-		return
-	}
 
 	appID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -500,14 +476,7 @@ func (h *AdminHandler) ApproveTeamApplication(c *gin.Context) {
 			return err
 		}
 
-		// 6. Write admin log
-		targetUser := app.AppliedByID
-		log := models.AdminLog{
-			AdminID:      adminID,
-			ActionType:   models.AdminActionApproveTeam,
-			TargetUserID: &targetUser,
-		}
-		return tx.Create(&log).Error
+		return nil
 	})
 
 	if txErr != nil {
@@ -525,9 +494,6 @@ func (h *AdminHandler) ApproveTeamApplication(c *gin.Context) {
 // RejectTeamApplication — POST /api/admin/team-applications/:id/reject  (admin only)
 // Body: { "reason": "string" } (required)
 func (h *AdminHandler) RejectTeamApplication(c *gin.Context) {
-	if err := h.checkAdmin(c); err != nil {
-		return
-	}
 
 	appID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -566,16 +532,7 @@ func (h *AdminHandler) RejectTeamApplication(c *gin.Context) {
 			return err
 		}
 
-		// 3. Write admin log
-		targetUser := app.AppliedByID
-		reason := body.Reason
-		log := models.AdminLog{
-			AdminID:      adminID,
-			ActionType:   models.AdminActionRejectTeam,
-			Reason:       &reason,
-			TargetUserID: &targetUser,
-		}
-		return tx.Create(&log).Error
+		return nil
 	})
 
 	if txErr != nil {
@@ -588,4 +545,69 @@ func (h *AdminHandler) RejectTeamApplication(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Application rejected"})
+}
+
+// BanUser — POST /api/admin/users/:id/ban
+func (h *AdminHandler) BanUser(c *gin.Context) {
+	adminID, _ := c.Get("user_id")
+	targetID := c.Param("id")
+
+	var input struct {
+		Reason string `json:"reason" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	adminIDUint := adminID.(uint)
+	if err := h.db.Model(&models.User{}).Where("id = ?", targetID).Updates(map[string]interface{}{
+		"is_banned":    true,
+		"ban_reason":   input.Reason,
+		"banned_by_id": adminIDUint,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to ban user"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "User banned successfully"})
+}
+
+// UnbanUser — POST /api/admin/users/:id/unban
+func (h *AdminHandler) UnbanUser(c *gin.Context) {
+	adminID, _ := c.Get("user_id")
+	targetID := c.Param("id")
+	adminIDUint := adminID.(uint)
+
+	// Set is_banned to false, but we temporarily set banned_by_id to adminIDUint 
+	// so the DB trigger knows who unbanned them. The trigger will NULL it out!
+	if err := h.db.Model(&models.User{}).Where("id = ?", targetID).Updates(map[string]interface{}{
+		"is_banned":    false,
+		"banned_by_id": adminIDUint,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to unban user"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "User unbanned successfully"})
+}
+
+// ChangeUserRole — POST /api/admin/users/:id/role
+func (h *AdminHandler) ChangeUserRole(c *gin.Context) {
+	targetID := c.Param("id")
+
+	var input struct {
+		Role string `json:"role" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.db.Model(&models.User{}).Where("id = ?", targetID).Update("role", input.Role).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update role"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "User role updated successfully"})
 }

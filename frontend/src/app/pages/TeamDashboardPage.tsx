@@ -212,6 +212,7 @@ export function TeamDashboardPage() {
   };
 
   const handleOpenApplicationModal = () => {
+    if (team) return;
     if (currentUser) {
       setInitialMembers([{ ...currentUser, role: 'leader' }]);
     } else {
@@ -258,8 +259,8 @@ export function TeamDashboardPage() {
                 Керуйте своєю перекладацькою командою
               </p>
             </div>
-            {/* Show apply button to ALL authenticated users who don't have a pending/approved application */}
-            {!existingApplication && (
+            {/* Show apply button to users who don't have an application or are in a team */}
+            {!existingApplication && !team && (
               <Button
                 onClick={handleOpenApplicationModal}
                 className="bg-[#59631f] hover:bg-[#59631f]/90 gap-2"

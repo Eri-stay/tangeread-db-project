@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Search, Edit, Ban, RotateCcw } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
+import { Search, Edit, Ban, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AdminLayout } from '../components/AdminLayout';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -8,52 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { BanModal } from '../components/BanModal';
+import { UnauthorizedPage } from './UnauthorizedPage';
 
 interface User {
-  id: string;
-  nickname: string;
+  id: number;
+  username: string;
   email: string;
-  avatar: string;
+  avatar_url?: string;
   role: string;
-  status: 'active' | 'banned';
-  banReason?: string;
+  is_banned: boolean;
+  ban_reason?: string;
 }
-
-const mockUsers: User[] = [
-  {
-    id: '1',
-    nickname: 'КитайськийДракон',
-    email: 'dragon@example.com',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-    role: 'reader',
-    status: 'active',
-  },
-  {
-    id: '2',
-    nickname: 'SakuraBlossom',
-    email: 'sakura@example.com',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-    role: 'author',
-    status: 'active',
-  },
-  {
-    id: '3',
-    nickname: 'SpamBot2024',
-    email: 'spam@bad.com',
-    avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150',
-    role: 'reader',
-    status: 'banned',
-    banReason: 'Розміщення спаму та реклами',
-  },
-  {
-    id: '4',
-    nickname: 'MoonlightEditor',
-    email: 'moon@example.com',
-    avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=150',
-    role: 'moderator',
-    status: 'active',
-  },
-];
 
 const roleLabels: { [key: string]: string } = {
   reader: 'Читач',
@@ -63,19 +29,67 @@ const roleLabels: { [key: string]: string } = {
 };
 
 export function UserManagementPage() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const navigate = useNavigate();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState('');
+  const [users, setUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const itemsPerPage = 10;
+  const [isLoading, setIsLoading] = useState(true);
+
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [banModalOpen, setBanModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [newRole, setNewRole] = useState('');
   const [banReason, setBanReason] = useState('');
 
-  const filteredUsers = users.filter(
-    (user) =>
-      user.nickname.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        setCurrentUserRole(user.role || '');
+      } catch (e) {}
+    }
+  }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  const fetchUsers = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
+      const res = await fetch(`${apiUrl}/users/search?q=${searchQuery}&page=${currentPage}&limit=${itemsPerPage}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setUsers(json.data || []);
+        if (json.meta) {
+          setTotalPages(Math.ceil(json.meta.total / itemsPerPage));
+        } else {
+          setTotalPages(1);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchUsers();
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, currentPage]);
+
 
   const handleEditRole = (user: User) => {
     setSelectedUser(user);
@@ -89,33 +103,77 @@ export function UserManagementPage() {
     setBanModalOpen(true);
   };
 
-  const handleRestore = (userId: string) => {
-    setUsers((prev) =>
-      prev.map((user) =>
-        user.id === userId ? { ...user, status: 'active', banReason: undefined } : user
-      )
-    );
+  const handleRestore = async (userId: number) => {
+    try {
+      const token = localStorage.getItem('token');
+      const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
+      const res = await fetch(`${apiUrl}/admin/users/${userId}/unban`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setUsers((prev) =>
+          prev.map((user) =>
+            user.id === userId ? { ...user, is_banned: false, ban_reason: undefined } : user
+          )
+        );
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const confirmRoleChange = () => {
+  const confirmRoleChange = async () => {
     if (selectedUser) {
-      setUsers((prev) =>
-        prev.map((user) => (user.id === selectedUser.id ? { ...user, role: newRole } : user))
-      );
+      try {
+        const token = localStorage.getItem('token');
+        const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
+        const res = await fetch(`${apiUrl}/admin/users/${selectedUser.id}/role`, {
+          method: 'POST',
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ role: newRole })
+        });
+        if (res.ok) {
+          setUsers((prev) =>
+            prev.map((user) => (user.id === selectedUser.id ? { ...user, role: newRole } : user))
+          );
+        }
+      } catch (e) {
+        console.error(e);
+      }
     }
     setEditModalOpen(false);
   };
 
-  const confirmBan = (reason: string, customNote: string, duration: string) => {
+  const confirmBan = async (reason: string, customNote: string, duration: string) => {
     if (selectedUser) {
       const fullReason = customNote ? `${reason} - ${customNote}` : reason;
-      setUsers((prev) =>
-        prev.map((user) =>
-          user.id === selectedUser.id
-            ? { ...user, status: 'banned', banReason: fullReason }
-            : user
-        )
-      );
+      try {
+        const token = localStorage.getItem('token');
+        const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
+        const res = await fetch(`${apiUrl}/admin/users/${selectedUser.id}/ban`, {
+          method: 'POST',
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ reason: fullReason })
+        });
+        if (res.ok) {
+          setUsers((prev) =>
+            prev.map((user) =>
+              user.id === selectedUser.id
+                ? { ...user, is_banned: true, ban_reason: fullReason }
+                : user
+            )
+          );
+        }
+      } catch (e) {
+        console.error(e);
+      }
       setBanModalOpen(false);
     }
   };
@@ -160,94 +218,137 @@ export function UserManagementPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-secondary/20 transition-colors">
-                    {/* User with Avatar */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full overflow-hidden bg-secondary border-2 border-border">
-                          <ImageWithFallback
-                            src={user.avatar}
-                            alt={user.nickname}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <span className="font-medium">{user.nickname}</span>
-                      </div>
-                    </td>
-
-                    {/* Email */}
-                    <td className="px-6 py-4 text-muted-foreground">{user.email}</td>
-
-                    {/* Role */}
-                    <td className="px-6 py-4">
-                      <span className="px-3 py-1 rounded-full bg-primary/20 text-primary text-sm font-medium">
-                        {roleLabels[user.role]}
-                      </span>
-                    </td>
-
-                    {/* Status */}
-                    <td className="px-6 py-4">
-                      {user.status === 'active' ? (
-                        <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-500 text-sm font-medium">
-                          Активний
-                        </span>
-                      ) : (
-                        <div className="space-y-1">
-                          <span className="px-3 py-1 rounded-full bg-destructive/20 text-destructive text-sm font-medium block w-fit">
-                            Заблокований
-                          </span>
-                          {user.banReason && (
-                            <p className="text-xs text-muted-foreground">{user.banReason}</p>
-                          )}
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Actions */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleEditRole(user)}
-                          className="gap-1"
-                        >
-                          <Edit className="h-3 w-3" />
-                          Редагувати роль
-                        </Button>
-                        {user.status === 'active' ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleBan(user)}
-                            className="gap-1 text-destructive hover:text-destructive border-destructive/30"
-                          >
-                            <Ban className="h-3 w-3" />
-                            Заблокувати
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleRestore(user.id)}
-                            className="gap-1 text-green-500 hover:text-green-500 border-green-500/30"
-                          >
-                            <RotateCcw className="h-3 w-3" />
-                            Відновити
-                          </Button>
-                        )}
-                      </div>
-                    </td>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-8 text-muted-foreground">Завантаження...</td>
                   </tr>
-                ))}
+                ) : (
+                  users.map((user) => (
+                    <tr key={user.id} className="hover:bg-secondary/20 transition-colors">
+                      {/* User with Avatar */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full overflow-hidden bg-secondary border-2 border-border">
+                            <ImageWithFallback
+                              src={user.avatar_url || ''}
+                              alt={user.username}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                          <span className="font-medium">{user.username}</span>
+                        </div>
+                      </td>
+
+                      {/* Email */}
+                      <td className="px-6 py-4 text-muted-foreground">{user.email}</td>
+
+                      {/* Role */}
+                      <td className="px-6 py-4">
+                        <span className="px-3 py-1 rounded-full bg-primary/20 text-primary text-sm font-medium">
+                          {roleLabels[user.role] || user.role}
+                        </span>
+                      </td>
+
+                      {/* Status */}
+                      <td className="px-6 py-4">
+                        {!user.is_banned ? (
+                          <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-500 text-sm font-medium">
+                            Активний
+                          </span>
+                        ) : (
+                          <div className="space-y-1">
+                            <span className="px-3 py-1 rounded-full bg-destructive/20 text-destructive text-sm font-medium block w-fit">
+                              Заблокований
+                            </span>
+                            {user.ban_reason && (
+                              <p className="text-xs text-muted-foreground">{user.ban_reason}</p>
+                            )}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-6 py-4">
+                        {user.id !== 1 ? (
+                          <div className="flex items-center justify-center gap-2">
+                            {/* Only admins can change roles */}
+                            {currentUserRole === 'admin' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditRole(user)}
+                                className="gap-1"
+                              >
+                                <Edit className="h-3 w-3" />
+                                Редагувати роль
+                              </Button>
+                            )}
+                            {!user.is_banned ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleBan(user)}
+                                className="gap-1 text-destructive hover:text-destructive border-destructive/30"
+                              >
+                                <Ban className="h-3 w-3" />
+                                Заблокувати
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRestore(user.id)}
+                                className="gap-1 text-green-500 hover:text-green-500 border-green-500/30"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                                Відновити
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center">
+                            <span className="text-xs text-muted-foreground bg-secondary/50 px-3 py-1 rounded-full">
+                              Головний адміністратор
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
-          {filteredUsers.length === 0 && (
+          {!isLoading && users.length === 0 && (
             <div className="p-12 text-center text-muted-foreground">
               Користувачів не знайдено
+            </div>
+          )}
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between p-4 border-t border-border bg-secondary/10">
+              <span className="text-sm text-muted-foreground">
+                Сторінка {currentPage} з {totalPages}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Попередня
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Наступна <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -259,7 +360,7 @@ export function UserManagementPage() {
           <DialogHeader>
             <DialogTitle>Зміна ролі користувача</DialogTitle>
             <DialogDescription>
-              Змінити роль для користувача {selectedUser?.nickname}
+              Змінити роль для користувача {selectedUser?.username}
             </DialogDescription>
           </DialogHeader>
 
@@ -295,7 +396,7 @@ export function UserManagementPage() {
       <BanModal
         open={banModalOpen}
         onClose={() => setBanModalOpen(false)}
-        userName={selectedUser?.nickname || ''}
+        userName={selectedUser?.username || ''}
         onConfirm={confirmBan}
       />
     </AdminLayout>

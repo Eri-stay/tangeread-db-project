@@ -14,17 +14,31 @@ interface HideReasonModalProps {
   onConfirm: (reason: string, customNote: string) => void;
 }
 
-const hideReasons = [
-  'Спам та реклама',
-  'Образи та агресивна поведінка',
-  'Непристойна аватарка',
-  'Порушення авторських прав',
+const mangaHideReasons = [
+  'Порушення авторських прав (DMCA)',
+  'Непристойна обкладинка / Матеріали 18+ без маркування',
+  'Низька якість сканів або перекладу',
+  'Реклама сторонніх ресурсів у розділах',
+  'Опис/назва не відповідають дійсності',
+  'Повторна публікація (дублікат)',
+  'Інше (вписати причину)',
+];
+
+const commentHideReasons = [
+  'Спам, флуд та реклама',
+  'Образи, агресія або цькування',
+  'Нецензурна та груба лексика',
+  'Спойлери без відповідного приховання',
+  'Провокація конфліктів (тролінг)',
+  'Пропаганда ненависті або дискримінація',
   'Інше (вписати причину)',
 ];
 
 export function HideReasonModal({ open, onClose, contentType, contentTitle, onConfirm }: HideReasonModalProps) {
   const [selectedReason, setSelectedReason] = useState('');
   const [customNote, setCustomNote] = useState('');
+
+  const reasons = contentType === 'manga' ? mangaHideReasons : commentHideReasons;
 
   const handleConfirm = () => {
     if (!selectedReason) return;
@@ -60,14 +74,14 @@ export function HideReasonModal({ open, onClose, contentType, contentTitle, onCo
               Причина приховання <span className="text-destructive">*</span>
             </Label>
             <Select value={selectedReason} onValueChange={setSelectedReason}>
-              <SelectTrigger 
-                id="hide-reason" 
+              <SelectTrigger
+                id="hide-reason"
                 className={`bg-secondary border-border ${!selectedReason ? 'border-destructive/50' : ''}`}
               >
                 <SelectValue placeholder="Оберіть причину..." />
               </SelectTrigger>
               <SelectContent className="bg-card border-border">
-                {hideReasons.map((reason) => (
+                {reasons.map((reason) => (
                   <SelectItem key={reason} value={reason}>
                     {reason}
                   </SelectItem>

@@ -67,8 +67,9 @@ func main() {
 	mediaStorage := s3storage.NewMediaStorage(s3Client, s3Bucket, "tangeread-media")
 	log.Printf("S3 Media Storage initialized for bucket: %s", s3Bucket)
 
-	// 5. Initialize Services
-	authService := services.NewAuthService(userRepo)
+	// 5. Initialize Repositories and Services
+	authRepo := repositories.NewAuthRepository(database.DB)
+	authService := services.NewAuthService(authRepo)
 	userService := services.NewUserService(userRepo)
 	mangaService := services.NewMangaService(mangaRepo, mediaStorage)
 	commentService := services.NewCommentService(commentRepo)
@@ -123,7 +124,7 @@ func main() {
 
 		// Admin routes (JWT required + admin role check inside handler)
 		admin := api.Group("/admin")
-		admin.Use(handlers.JWTMiddleware())
+		admin.Use(handlers.JWTMiddleware(), handlers.RequireRole("admin"))
 		{
 			admin.POST("/seed", adminHandler.RunSeed)
 			admin.DELETE("/seed", adminHandler.DeleteSeed)
@@ -134,11 +135,16 @@ func main() {
 			admin.GET("/team-applications", adminHandler.GetTeamApplications)
 			admin.POST("/team-applications/:id/approve", adminHandler.ApproveTeamApplication)
 			admin.POST("/team-applications/:id/reject", adminHandler.RejectTeamApplication)
+			
+			// User management
+			admin.POST("/users/:id/ban", adminHandler.BanUser)
+			admin.POST("/users/:id/unban", adminHandler.UnbanUser)
+			admin.POST("/users/:id/role", adminHandler.ChangeUserRole)
 		}
 
 		// Author routes
 		author := api.Group("/author")
-		author.Use(handlers.JWTMiddleware())
+		author.Use(handlers.JWTMiddleware(), handlers.RequireRole("author", "admin"))
 		{
 			author.GET("/projects", mangaHandler.GetAuthorProjects)
 			author.POST("/manga", mangaHandler.CreateManga)
@@ -178,13 +184,14 @@ func main() {
 
 		// Moderation routes
 		mod := api.Group("/moderation")
-		mod.Use(handlers.JWTMiddleware())
+		mod.Use(handlers.JWTMiddleware(), handlers.RequireRole("moderator", "admin"))
 		{
 			mod.GET("/manga", moderationHandler.GetManga)
 			mod.POST("/manga/:id/toggle", moderationHandler.ToggleMangaVisibility)
 			mod.GET("/comments", moderationHandler.GetComments)
 			mod.POST("/comments/:id/toggle", moderationHandler.ToggleCommentVisibility)
 			mod.GET("/logs", moderationHandler.GetLogs)
+			mod.POST("/chapter", mangaHandler.CreateChapterAsStaff)
 		}
 	}
 

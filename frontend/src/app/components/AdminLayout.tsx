@@ -1,21 +1,26 @@
 import { ReactNode } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router';
-import { LayoutDashboard, Users, FileEdit, ScrollText, Tags, Shield, UserCheck } from 'lucide-react';
+import { Link, useLocation } from 'react-router';
+import { LayoutDashboard, Users, FileEdit, ScrollText, Shield, UserCheck } from 'lucide-react';
 
 interface AdminLayoutProps {
   children: ReactNode;
 }
 
-const navItems = [
-  { path: '/admin/dashboard', label: 'Дашборд', icon: LayoutDashboard },
-  { path: '/admin/users', label: 'Користувачі', icon: Users },
-  { path: '/admin/content', label: 'Управління контентом', icon: FileEdit },
-  { path: '/admin/team-applications', label: 'Заявки на команди', icon: UserCheck },
-  { path: '/admin/logs', label: 'Журнал аудиту', icon: ScrollText },
+const allNavItems = [
+  { path: '/admin/dashboard',         label: 'Дашборд',               icon: LayoutDashboard, roles: ['admin'] },
+  { path: '/admin/users',             label: 'Користувачі',           icon: Users,           roles: ['admin'] },
+  { path: '/admin/content',           label: 'Управління контентом',  icon: FileEdit,        roles: ['admin', 'moderator'] },
+  { path: '/admin/team-applications', label: 'Заявки на команди',     icon: UserCheck,       roles: ['admin'] },
+  { path: '/admin/logs',              label: 'Журнал аудиту',         icon: ScrollText,      roles: ['admin', 'moderator'] },
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const location = useLocation();
+
+  const userStr = localStorage.getItem('user');
+  const userRole: string = userStr ? (() => { try { return JSON.parse(userStr).role || ''; } catch { return ''; } })() : '';
+
+  const navItems = allNavItems.filter(item => item.roles.includes(userRole));
 
   return (
     <div className="flex">

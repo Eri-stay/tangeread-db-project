@@ -9,7 +9,6 @@ interface AuthorLayoutProps {
 const navItems = [
   { path: '/author/teams', label: 'Моя команда', icon: Users },
   { path: '/author/projects', label: 'Мої проєкти', icon: BookOpen },
-  { path: '/author/analytics', label: 'Статистика', icon: BarChart3 },
 ];
 
 export function AuthorLayout({ children }: AuthorLayoutProps) {
@@ -43,8 +42,8 @@ export function AuthorLayout({ children }: AuthorLayoutProps) {
                   key={item.path}
                   to={item.path}
                   className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-secondary text-foreground'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-secondary text-foreground'
                     }`}
                 >
                   <Icon className="h-5 w-5 flex-shrink-0" />

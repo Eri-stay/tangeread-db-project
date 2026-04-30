@@ -15,7 +15,9 @@ import { ContentModerationPage } from './pages/ContentModerationPage';
 import { ModerationLogsPage } from './pages/ModerationLogsPage';
 import { TeamApplicationsPage } from './pages/TeamApplicationsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { UnauthorizedPage } from './pages/UnauthorizedPage';
 import { Layout } from './components/Layout';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
 export const createAppRouter = () => {
   return createBrowserRouter([
@@ -36,58 +38,116 @@ export const createAppRouter = () => {
           element: <MangaDetailPage />,
         },
         {
-          path: 'profile',
-          element: <ProfilePage />,
+          path: 'unauthorized',
+          element: <UnauthorizedPage />,
         },
-        // Author workspace routes
+        // Requires any login
+        {
+          path: 'profile',
+          element: (
+            <ProtectedRoute requireAuth>
+              <ProfilePage />
+            </ProtectedRoute>
+          ),
+        },
+        // Author workspace — author or admin only
         {
           path: '/author/teams',
-          element: <TeamDashboardPage />,
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['author', 'admin']}>
+              <TeamDashboardPage />
+            </ProtectedRoute>
+          ),
         },
         {
           path: '/author/projects',
-          element: <AuthorProjectsPage />,
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['author', 'admin']}>
+              <AuthorProjectsPage />
+            </ProtectedRoute>
+          ),
         },
         {
           path: '/author/manga/new',
-          element: <MangaEditorPage />,
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['author', 'admin']}>
+              <MangaEditorPage />
+            </ProtectedRoute>
+          ),
         },
         {
           path: '/author/manga/:id/edit',
-          element: <MangaEditorPage />,
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['author', 'admin']}>
+              <MangaEditorPage />
+            </ProtectedRoute>
+          ),
         },
         {
           path: '/author/manga/:id/chapter/new',
-          element: <ChapterUploadPage />,
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['author', 'admin']}>
+              <ChapterUploadPage />
+            </ProtectedRoute>
+          ),
         },
         {
           path: '/author/analytics',
-          element: <AuthorAnalyticsPage />,
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['author', 'admin']}>
+              <AuthorAnalyticsPage />
+            </ProtectedRoute>
+          ),
         },
         {
           path: '/author/settings',
-          element: <div className="p-8">Settings Page - Coming Soon</div>,
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['author', 'admin']}>
+              <div className="p-8">Settings Page - Coming Soon</div>
+            </ProtectedRoute>
+          ),
         },
-        // Admin workspace routes
+        // Admin workspace — admin only
         {
           path: '/admin/dashboard',
-          element: <AdminDashboardPage />,
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['admin']}>
+              <AdminDashboardPage />
+            </ProtectedRoute>
+          ),
         },
         {
           path: '/admin/users',
-          element: <UserManagementPage />,
-        },
-        {
-          path: '/admin/content',
-          element: <ContentModerationPage />,
-        },
-        {
-          path: '/admin/logs',
-          element: <ModerationLogsPage />,
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['admin']}>
+              <UserManagementPage />
+            </ProtectedRoute>
+          ),
         },
         {
           path: '/admin/team-applications',
-          element: <TeamApplicationsPage />,
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['admin']}>
+              <TeamApplicationsPage />
+            </ProtectedRoute>
+          ),
+        },
+        // Moderation — admin or moderator
+        {
+          path: '/admin/content',
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['admin', 'moderator']}>
+              <ContentModerationPage />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: '/admin/logs',
+          element: (
+            <ProtectedRoute requireAuth allowedRoles={['admin', 'moderator']}>
+              <ModerationLogsPage />
+            </ProtectedRoute>
+          ),
         },
         {
           path: '*',

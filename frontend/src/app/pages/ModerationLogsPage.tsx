@@ -5,40 +5,42 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useState, useEffect } from 'react';
 
 interface LogEntry {
-  id: number;
-  admin_id: number;
-  admin?: { username: string };
-  action_type: string;
-  reason?: string;
-  target_user_id?: number;
-  target_manga_id?: number;
-  target_chapter_id?: number;
-  target_comment_id?: number;
-  created_at: string;
+  ID: number;
+  AdminID: number;
+  Admin?: { username: string; id: number; email: string };
+  ActionType: string;
+  Reason?: string;
+  TargetUserID?: number;
+  TargetMangaID?: number;
+  TargetChapterID?: number;
+  TargetCommentID?: number;
+  CreatedAt: string;
 }
 
 const actionTypeColors: { [key: string]: { bg: string; text: string } } = {
-  hide_manga: { bg: 'bg-yellow-500/20', text: 'text-yellow-500' },
-  hide_comment: { bg: 'bg-yellow-500/20', text: 'text-yellow-500' },
-  ban_user: { bg: 'bg-destructive/20', text: 'text-destructive' },
-  edit_manga: { bg: 'bg-blue-500/20', text: 'text-blue-500' },
-  edit_comment: { bg: 'bg-blue-500/20', text: 'text-blue-500' },
-  restore: { bg: 'bg-green-500/20', text: 'text-green-500' },
+  hide_manga:     { bg: 'bg-yellow-500/20', text: 'text-yellow-500' },
+  hide_comment:   { bg: 'bg-yellow-500/20', text: 'text-yellow-500' },
+  ban_user:       { bg: 'bg-destructive/20', text: 'text-destructive' },
+  unban_user:     { bg: 'bg-green-500/20',   text: 'text-green-500' },
+  edit_manga:     { bg: 'bg-blue-500/20',    text: 'text-blue-500' },
+  edit_comment:   { bg: 'bg-blue-500/20',    text: 'text-blue-500' },
+  restore:        { bg: 'bg-green-500/20',   text: 'text-green-500' },
   delete_chapter: { bg: 'bg-destructive/30', text: 'text-destructive' },
-  approve_team: { bg: 'bg-green-500/20', text: 'text-green-500' },
-  reject_team: { bg: 'bg-destructive/20', text: 'text-destructive' },
+  approve_team:   { bg: 'bg-green-500/20',   text: 'text-green-500' },
+  reject_team:    { bg: 'bg-destructive/20', text: 'text-destructive' },
 };
 
 const actionTypeLabels: { [key: string]: string } = {
-  hide_manga: 'Приховано манґу',
-  hide_comment: 'Приховано коментар',
-  ban_user: 'Блокування',
-  edit_manga: 'Редаговано манґу',
-  edit_comment: 'Редаговано коментар',
-  restore: 'Відновлення',
+  hide_manga:     'Приховано манґу',
+  hide_comment:   'Приховано коментар',
+  ban_user:       'Блокування',
+  unban_user:     'Розблокування',
+  edit_manga:     'Редаговано манґу',
+  edit_comment:   'Редаговано коментар',
+  restore:        'Відновлення',
   delete_chapter: 'Видалення розділу',
-  approve_team: 'Прийнято команду',
-  reject_team: 'Відхилено команду',
+  approve_team:   'Прийнято команду',
+  reject_team:    'Відхилено команду',
 };
 
 export function ModerationLogsPage() {
@@ -73,25 +75,25 @@ export function ModerationLogsPage() {
   };
 
   const getObjectDescription = (log: LogEntry) => {
-    if (log.target_manga_id) return `Manga ID: ${log.target_manga_id}`;
-    if (log.target_comment_id) return `Comment ID: ${log.target_comment_id}`;
-    if (log.target_user_id) return `User ID: ${log.target_user_id}`;
-    if (log.target_chapter_id) return `Chapter ID: ${log.target_chapter_id}`;
+    if (log.TargetMangaID)   return `Manga ID: ${log.TargetMangaID}`;
+    if (log.TargetCommentID) return `Comment ID: ${log.TargetCommentID}`;
+    if (log.TargetUserID)    return `User ID: ${log.TargetUserID}`;
+    if (log.TargetChapterID) return `Chapter ID: ${log.TargetChapterID}`;
     return '---';
   };
 
   const filteredLogs = logs.filter((log) => {
-    const matchesAdmin = filterAdmin === 'all' || log.admin?.username === filterAdmin;
-    const matchesActionType = filterActionType === 'all' || log.action_type === filterActionType;
+    const matchesAdmin      = filterAdmin === 'all' || log.Admin?.username === filterAdmin;
+    const matchesActionType = filterActionType === 'all' || log.ActionType === filterActionType;
     const matchesSearch =
       searchQuery === '' ||
       getObjectDescription(log).toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (log.reason?.toLowerCase().includes(searchQuery.toLowerCase()) || false);
+      (log.Reason?.toLowerCase().includes(searchQuery.toLowerCase()) || false);
 
     return matchesAdmin && matchesActionType && matchesSearch;
   });
 
-  const uniqueAdmins = Array.from(new Set(logs.map((log) => log.admin?.username).filter(Boolean)));
+  const uniqueAdmins = Array.from(new Set(logs.map((log) => log.Admin?.username).filter(Boolean)));
 
   return (
     <AdminLayout>
@@ -177,14 +179,14 @@ export function ModerationLogsPage() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filteredLogs.map((log) => {
-                    const colors = actionTypeColors[log.action_type] || { bg: 'bg-secondary', text: 'text-muted-foreground' };
+                    const colors = actionTypeColors[log.ActionType] || { bg: 'bg-secondary', text: 'text-muted-foreground' };
                     return (
-                      <tr key={log.id} className="hover:bg-secondary/20 transition-colors">
+                      <tr key={log.ID} className="hover:bg-secondary/20 transition-colors">
                         {/* Admin */}
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-primary" />
-                            <span className="font-medium">{log.admin?.username || `ID: ${log.admin_id}`}</span>
+                            <span className="font-medium">{log.Admin?.username || `ID: ${log.AdminID}`}</span>
                           </div>
                         </td>
 
@@ -193,7 +195,7 @@ export function ModerationLogsPage() {
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-medium inline-block ${colors.bg} ${colors.text}`}
                           >
-                            {actionTypeLabels[log.action_type] || log.action_type}
+                            {actionTypeLabels[log.ActionType] || log.ActionType}
                           </span>
                         </td>
 
@@ -206,15 +208,15 @@ export function ModerationLogsPage() {
 
                         {/* Reason */}
                         <td className="px-6 py-4 max-w-md">
-                          <p className="text-sm truncate" title={log.reason}>
-                            {log.reason || 'Без причини'}
+                          <p className="text-sm truncate" title={log.Reason}>
+                            {log.Reason || 'Без причини'}
                           </p>
                         </td>
 
                         {/* Date */}
                         <td className="px-6 py-4">
                           <span className="text-sm text-muted-foreground font-mono">
-                            {new Date(log.created_at).toLocaleString('uk-UA')}
+                            {new Date(log.CreatedAt).toLocaleString('uk-UA')}
                           </span>
                         </td>
                       </tr>
@@ -239,7 +241,7 @@ export function ModerationLogsPage() {
                   Показано записів: <span className="font-semibold text-foreground">{filteredLogs.length}</span> з <span className="font-semibold text-foreground">{logs.length}</span>
                 </span>
                 <span className="text-muted-foreground">
-                  Останнє оновлення: {logs[0]?.created_at ? new Date(logs[0].created_at).toLocaleString('uk-UA') : '---'}
+                  Останнє оновлення: {logs[0]?.CreatedAt ? new Date(logs[0].CreatedAt).toLocaleString('uk-UA') : '---'}
                 </span>
               </div>
             </div>

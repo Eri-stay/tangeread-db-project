@@ -21,8 +21,7 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [generalError, setGeneralError] = useState('');
 
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
-
+  const apiUrl = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080/api';
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setNicknameError('');
@@ -47,9 +46,16 @@ export function AuthModal({ open, onClose, onSuccess }: AuthModalProps) {
         return;
       }
 
-      // Switch to login tab on success
-      setActiveTab('login');
-      setGeneralError('Реєстрація успішна! Тепер увійдіть.');
+      // Save token and user info to log in automatically
+      if (data.token) {
+        localStorage.setItem('token', data.token);
+      }
+      if (data.user) {
+        localStorage.setItem('user', JSON.stringify(data.user));
+      }
+
+      onSuccess?.();
+      onClose();
     } catch (err) {
       setGeneralError('Помилка з\'єднання з сервером');
     } finally {

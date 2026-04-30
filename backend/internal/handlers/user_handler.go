@@ -48,6 +48,7 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 		"email":      user.Email,
 		"avatar_url": user.AvatarURL,
 		"role":       user.Role,
+		"is_banned":  user.IsBanned,
 	})
 }
 
@@ -362,6 +363,17 @@ func (h *UserHandler) SubmitTeamApplication(c *gin.Context) {
 		return
 	}
 
+	// Prevent users already in a team from submitting an application
+	var memberCount int64
+	if err := database.DB.Model(&models.TeamMember{}).Where("user_id = ?", userID).Count(&memberCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database error checking team membership"})
+		return
+	}
+	if memberCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "You are already in a team"})
+		return
+	}
+
 	// Prevent duplicate pending applications from the same user
 	var existing models.TeamApplication
 	err := database.DB.
@@ -418,21 +430,50 @@ func (h *UserHandler) GetMyTeamApplication(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": app})
 }
 
-// SearchUsers — GET /api/users/search?q=...
+// SearchUsers — GET /api/users/search?q=...&page=1&limit=10
 func (h *UserHandler) SearchUsers(c *gin.Context) {
 	query := c.Query("q")
-	if query == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Search query is required"})
+	
+	pageStr := c.Query("page")
+	page := 1
+	if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+		page = p
+	}
+
+	limitStr := c.Query("limit")
+	limit := 10
+	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+		limit = l
+	}
+
+	offset := (page - 1) * limit
+
+	var users []models.User
+	var total int64
+
+	dbQuery := database.DB.Model(&models.User{})
+	if query != "" {
+		dbQuery = dbQuery.Where("username ILIKE ? OR email ILIKE ?", "%"+query+"%", "%"+query+"%")
+	}
+
+	if err := dbQuery.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count users"})
 		return
 	}
 
-	var users []models.User
-	if err := database.DB.Where("username ILIKE ? OR email ILIKE ?", "%"+query+"%", "%"+query+"%").Limit(10).Find(&users).Error; err != nil {
+	if err := dbQuery.Order("created_at DESC").Offset(offset).Limit(limit).Find(&users).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Search failed"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": users})
+	c.JSON(http.StatusOK, gin.H{
+		"data": users,
+		"meta": gin.H{
+			"total": total,
+			"page":  page,
+			"limit": limit,
+		},
+	})
 }
 
 // AddTeamMember — POST /api/users/team/:id/members

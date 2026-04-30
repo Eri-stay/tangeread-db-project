@@ -29,6 +29,7 @@ export function MangaDetailPage() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [lastReadChapter, setLastReadChapter] = useState<number | null>(null);
   const [user, setUser] = useState<{username: string, role: string} | null>(null);
+  const [userTeam, setUserTeam] = useState<any>(null);
   const [similarOffset, setSimilarOffset] = useState(10);
   const [hasMoreSimilar, setHasMoreSimilar] = useState(true);
   const [isFetchingSimilar, setIsFetchingSimilar] = useState(false);
@@ -64,6 +65,7 @@ export function MangaDetailPage() {
         const mappedManga: Manga = {
           id: String(b.id),
           title: b.title_ua || b.title_orig || 'Невідома назва',
+          originalTitle: b.title_orig || '',
           coverImage: b.cover_url || 'https://images.unsplash.com/photo-1612036782180-6f0b6cd846fe?w=800&q=80',
           author: b.team?.name || 'Невідомо',
           rating: b.avg_rating || 0,
@@ -121,6 +123,14 @@ export function MangaDetailPage() {
             setIsFavorite(statusJson.is_favorite || false);
             setUserRating(statusJson.score || 0);
             setLastReadChapter(statusJson.last_chapter || null);
+          }
+          
+          const teamRes = await fetch(`${apiUrl}/users/team`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (teamRes.ok) {
+            const teamJson = await teamRes.json();
+            setUserTeam(teamJson.data || null);
           }
         }
         // Reset pagination state for new manga
@@ -332,7 +342,12 @@ export function MangaDetailPage() {
 
           {/* Info */}
           <div>
-            <h1 className="text-3xl font-bold mb-2">{manga.title}</h1>
+            <h1 className="text-3xl font-bold mb-1">{manga.title}</h1>
+            {manga.originalTitle && (
+              <p className="text-sm text-muted-foreground mb-3 font-medium opacity-80">
+                {manga.originalTitle}
+              </p>
+            )}
             <p className="text-muted-foreground mb-4">Автор: {manga.author}</p>
 
             <div className="flex flex-wrap gap-2 mb-4">
@@ -438,7 +453,7 @@ export function MangaDetailPage() {
                 <Heart className={`h-5 w-5 transition-all ${isFavorite ? 'fill-pink-500' : ''}`} />
               </button>
 
-              {user && (user.role === 'author' || user.role === 'moderator' || user.role === 'admin') && (
+              {user && (user.role === 'moderator' || user.role === 'admin' || (user.role === 'author' && userTeam && userTeam.name === manga.team)) && (
                 <Button
                   asChild
                   variant="outline"

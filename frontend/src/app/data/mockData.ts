@@ -1,6 +1,7 @@
 export interface Manga {
   id: string;
   title: string;
+  originalTitle?: string;
   coverImage: string;
   author: string;
   rating: number;

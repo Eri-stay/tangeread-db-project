@@ -19,6 +19,17 @@ BEGIN
                 RAISE EXCEPTION 'Soft deletion of administrator accounts is strictly prohibited.';
             END IF;
         END IF;
+
+        -- Prevent changing ID or role of the primary admin (id=1)
+        IF OLD.id = 1 THEN
+            IF NEW.id != 1 THEN
+                RAISE EXCEPTION 'Changing the ID of the primary administrator (id=1) is strictly prohibited.';
+            END IF;
+            IF NEW.role != 'admin' THEN
+                RAISE EXCEPTION 'Changing the role of the primary administrator (id=1) is strictly prohibited.';
+            END IF;
+        END IF;
+
         RETURN NEW;
     END IF;
 

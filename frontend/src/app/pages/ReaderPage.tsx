@@ -17,6 +17,8 @@ export function ReaderPage() {
   const [manga, setManga] = useState<any>(null);
   const [chapterInfo, setChapterInfo] = useState<any>(null);
   const [pages, setPages] = useState<string[]>([]);
+  const [prevChapter, setPrevChapter] = useState<any>(null);
+  const [nextChapter, setNextChapter] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -42,8 +44,24 @@ export function ReaderPage() {
         setManga(mData.data);
         setChapterInfo(cData.data);
 
+        // Find prev/next chapters
+        const sortedChapters = [...(mData.data.chapters || [])].sort((a, b) => a.chapter_number - b.chapter_number);
+        const currentIndex = sortedChapters.findIndex(c => c.chapter_number === cData.data.chapter_number);
+        
+        if (currentIndex > 0) {
+          setPrevChapter(sortedChapters[currentIndex - 1]);
+        } else {
+          setPrevChapter(null);
+        }
+        
+        if (currentIndex !== -1 && currentIndex < sortedChapters.length - 1) {
+          setNextChapter(sortedChapters[currentIndex + 1]);
+        } else {
+          setNextChapter(null);
+        }
+
         // Parse pages
-        const rawPages = cData.data.PagesURL;
+        const rawPages = cData.data.pages_url;
         if (rawPages) {
           try {
             const parsed = JSON.parse(rawPages);
@@ -119,9 +137,9 @@ export function ReaderPage() {
           </Button>
 
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">{manga.TitleUa}</span>
+            <span className="text-sm font-medium">{manga.title_ua || manga.title_orig || 'Невідома назва'}</span>
             <span className="text-sm text-muted-foreground">•</span>
-            <span className="text-sm text-muted-foreground">Розділ {chapterInfo.ChapterNumber}</span>
+            <span className="text-sm font-bold text-primary">Розділ {chapterInfo.chapter_number}</span>
           </div>
 
           <div className="flex gap-2">
@@ -163,32 +181,34 @@ export function ReaderPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => chapterInfo.ChapterNumber > 1 && navigate(`/read/${id}/${chapterInfo.ChapterNumber - 1}`)}
-            disabled={chapterInfo.ChapterNumber <= 1}
+            onClick={() => prevChapter && navigate(`/read/${id}/${prevChapter.chapter_number}`)}
+            disabled={!prevChapter}
             className="gap-2"
           >
             <ChevronLeft className="h-4 w-4" />
-            Попередній
+            <span className="hidden sm:inline">Попередній</span>
+            <span className="sm:hidden">Поп.</span>
           </Button>
 
           <Button
             variant="outline"
             size="sm"
             onClick={() => navigate(`/manga/${id}`)}
-            className="gap-2"
+            className="gap-2 mx-2"
           >
             <List className="h-4 w-4" />
-            Всі розділи
+            <span className="hidden sm:inline">Всі розділи</span>
           </Button>
 
           <Button
             variant="outline"
             size="sm"
-            onClick={() => chapterInfo.ChapterNumber < (manga.chapters_count || 1000) && navigate(`/read/${id}/${chapterInfo.ChapterNumber + 1}`)}
-            disabled={chapterInfo.ChapterNumber >= (manga.chapters_count || 1000)}
+            onClick={() => nextChapter && navigate(`/read/${id}/${nextChapter.chapter_number}`)}
+            disabled={!nextChapter}
             className="gap-2"
           >
-            Наступний
+            <span className="hidden sm:inline">Наступний</span>
+            <span className="sm:hidden">Наст.</span>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>

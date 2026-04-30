@@ -28,7 +28,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authService.Register(req.Email, req.Username, req.Password)
+	user, token, err := h.authService.Register(req.Email, req.Username, req.Password)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -36,10 +36,14 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "User registered successfully",
+		"token":   token,
 		"user": gin.H{
-			"id":       user.ID,
-			"username": user.Username,
-			"email":    user.Email,
+			"id":         user.ID,
+			"username":   user.Username,
+			"email":      user.Email,
+			"role":       user.Role,
+			"avatar_url": user.AvatarURL,
+			"is_banned":  user.IsBanned,
 		},
 	})
 }
@@ -70,6 +74,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			"email":      user.Email,
 			"role":       user.Role,
 			"avatar_url": user.AvatarURL,
+			"is_banned":  user.IsBanned,
 		},
 	})
 }

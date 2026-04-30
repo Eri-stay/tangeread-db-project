@@ -157,7 +157,11 @@ func (h *MangaHandler) GetChapter(c *gin.Context) {
 
 	// Record reading history if user is logged in
 	if userID, exists := c.Get("user_id"); exists {
-		go h.mangaService.UpdateReadingHistory(userID.(uint), uint(mangaID), chapter.ID)
+		role, _ := c.Get("role")
+		roleStr, _ := role.(string)
+		if roleStr != string(models.UserRoleModerator) && roleStr != string(models.UserRoleAdmin) {
+			go h.mangaService.UpdateReadingHistory(userID.(uint), uint(mangaID), chapter.ID)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": chapter})
@@ -532,4 +536,49 @@ func (h *MangaHandler) GetSimilarManga(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": mangas})
+}
+
+func (h *MangaHandler) CreateChapterAsStaff(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	var input struct {
+		MangaID       uint    `json:"manga_id" binding:"required"`
+		Volume        *int    `json:"volume"`
+		ChapterNumber float64 `json:"chapter_number" binding:"required"`
+		Title         string  `json:"title"`
+		PagesURL      string  `json:"pages_url" binding:"required"` // JSON array of URLs
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var manga models.Manga
+	if err := database.DB.First(&manga, input.MangaID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Manga not found"})
+		return
+	}
+
+	uid := userID.(uint)
+	chapter := &models.Chapter{
+		MangaID:       input.MangaID,
+		Volume:        input.Volume,
+		ChapterNumber: input.ChapterNumber,
+		Title:         &input.Title,
+		PagesURL:      &input.PagesURL,
+		UploaderID:    &uid,
+		DisplayStatus: models.DisplayStatusActive,
+	}
+
+	if err := h.mangaService.CreateChapter(chapter); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"data": chapter})
 }

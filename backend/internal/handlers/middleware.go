@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/eri-stay/tangeread-db-project/backend/internal/database"
+	"github.com/eri-stay/tangeread-db-project/backend/internal/models"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -54,7 +56,6 @@ func JWTMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Extract user ID. jwt.MapClaims parses numbers as float64 from JSON
 		userIDFloat, ok := claims["user_id"].(float64)
 		if !ok {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in token"})
@@ -62,9 +63,28 @@ func JWTMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		var user models.User
+		if err := database.DB.Select("id, is_banned, deleted_at, role").First(&user, uint(userIDFloat)).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+			c.Abort()
+			return
+		}
+
+		if user.IsBanned {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Your account has been banned"})
+			c.Abort()
+			return
+		}
+
+		if user.DeletedAt.Valid {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Your account has been deleted"})
+			c.Abort()
+			return
+		}
+
 		// Store user ID and role in context for later handlers
-		c.Set("user_id", uint(userIDFloat))
-		c.Set("role", claims["role"])
+		c.Set("user_id", user.ID)
+		c.Set("role", string(user.Role))
 
 		c.Next()
 	}
@@ -111,10 +131,44 @@ func OptionalJWTMiddleware() gin.HandlerFunc {
 
 		userIDFloat, ok := claims["user_id"].(float64)
 		if ok {
-			c.Set("user_id", uint(userIDFloat))
-			c.Set("role", claims["role"])
+			var user models.User
+			if err := database.DB.Select("id, is_banned, deleted_at, role").First(&user, uint(userIDFloat)).Error; err == nil {
+				if !user.IsBanned && !user.DeletedAt.Valid {
+					c.Set("user_id", user.ID)
+					c.Set("role", string(user.Role))
+				}
+			}
 		}
 
 		c.Next()
+	}
+}
+
+// RequireRole returns a middleware that allows only users with the given roles.
+func RequireRole(allowed ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		roleVal, exists := c.Get("role")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			c.Abort()
+			return
+		}
+
+		role, ok := roleVal.(string)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid role format"})
+			c.Abort()
+			return
+		}
+
+		for _, r := range allowed {
+			if role == r {
+				c.Next()
+				return
+			}
+		}
+
+		c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
+		c.Abort()
 	}
 }

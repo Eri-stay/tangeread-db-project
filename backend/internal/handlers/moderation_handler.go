@@ -29,24 +29,45 @@ func (h *ModerationHandler) checkModerator(c *gin.Context) bool {
 
 // GetManga — GET /api/moderation/manga
 func (h *ModerationHandler) GetManga(c *gin.Context) {
-	if !h.checkModerator(c) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if page < 1 { page = 1 }
+	if limit < 1 || limit > 100 { limit = 10 }
+	offset := (page - 1) * limit
+
+	search := c.Query("search")
+
+	var mangas []models.Manga
+	var total int64
+
+	query := h.db.Model(&models.Manga{})
+	if search != "" {
+		// Use ILIKE for case-insensitive search in Postgres
+		query = query.Where("title_ua ILIKE ? OR title_orig ILIKE ?", "%"+search+"%", "%"+search+"%")
+	}
+
+	if err := query.Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count manga"})
 		return
 	}
 
-	var mangas []models.Manga
-	if err := h.db.Preload("Team").Find(&mangas).Error; err != nil {
+	if err := query.Preload("Team").Order("created_at DESC").Offset(offset).Limit(limit).Find(&mangas).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch manga"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": mangas})
+	c.JSON(http.StatusOK, gin.H{
+		"data": mangas,
+		"meta": gin.H{
+			"total": total,
+			"page":  page,
+			"limit": limit,
+		},
+	})
 }
 
 // ToggleMangaVisibility — POST /api/moderation/manga/:id/toggle
 func (h *ModerationHandler) ToggleMangaVisibility(c *gin.Context) {
-	if !h.checkModerator(c) {
-		return
-	}
 
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -101,24 +122,37 @@ func (h *ModerationHandler) ToggleMangaVisibility(c *gin.Context) {
 
 // GetComments — GET /api/moderation/comments
 func (h *ModerationHandler) GetComments(c *gin.Context) {
-	if !h.checkModerator(c) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if page < 1 { page = 1 }
+	if limit < 1 || limit > 100 { limit = 10 }
+	offset := (page - 1) * limit
+
+	var comments []models.Comment
+	var total int64
+
+	if err := h.db.Model(&models.Comment{}).Count(&total).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count comments"})
 		return
 	}
 
-	var comments []models.Comment
-	if err := h.db.Preload("User").Preload("Chapter.Manga").Order("created_at DESC").Find(&comments).Error; err != nil {
+	if err := h.db.Preload("User").Preload("Chapter.Manga").Order("created_at DESC").Offset(offset).Limit(limit).Find(&comments).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch comments"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": comments})
+	c.JSON(http.StatusOK, gin.H{
+		"data": comments,
+		"meta": gin.H{
+			"total": total,
+			"page":  page,
+			"limit": limit,
+		},
+	})
 }
 
 // GetLogs — GET /api/moderation/logs
 func (h *ModerationHandler) GetLogs(c *gin.Context) {
-	if !h.checkModerator(c) {
-		return
-	}
 
 	var logs []models.AdminLog
 	if err := h.db.Preload("Admin").Order("created_at DESC").Find(&logs).Error; err != nil {
@@ -131,9 +165,6 @@ func (h *ModerationHandler) GetLogs(c *gin.Context) {
 
 // ToggleCommentVisibility — POST /api/moderation/comments/:id/toggle
 func (h *ModerationHandler) ToggleCommentVisibility(c *gin.Context) {
-	if !h.checkModerator(c) {
-		return
-	}
 
 	idStr := c.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
